@@ -1,0 +1,2188 @@
+{
+  "pandoc-api-version": [
+    1,
+    23,
+    1
+  ],
+  "meta": {},
+  "blocks": [
+    {
+      "t": "Header",
+      "c": [
+        1,
+        [
+          "github-flavored-markdown-example",
+          [],
+          []
+        ],
+        [
+          {
+            "t": "Str",
+            "c": "GitHub"
+          },
+          {
+            "t": "Space"
+          },
+          {
+            "t": "Str",
+            "c": "Flavored"
+          },
+          {
+            "t": "Space"
+          },
+          {
+            "t": "Str",
+            "c": "Markdown"
+          },
+          {
+            "t": "Space"
+          },
+          {
+            "t": "Str",
+            "c": "Example"
+          }
+        ]
+      ]
+    },
+    {
+      "t": "Header",
+      "c": [
+        2,
+        [
+          "headers",
+          [],
+          []
+        ],
+        [
+          {
+            "t": "Str",
+            "c": "Headers"
+          }
+        ]
+      ]
+    },
+    {
+      "t": "Header",
+      "c": [
+        3,
+        [
+          "h3",
+          [],
+          []
+        ],
+        [
+          {
+            "t": "Str",
+            "c": "H3"
+          }
+        ]
+      ]
+    },
+    {
+      "t": "Header",
+      "c": [
+        4,
+        [
+          "h4",
+          [],
+          []
+        ],
+        [
+          {
+            "t": "Str",
+            "c": "H4"
+          }
+        ]
+      ]
+    },
+    {
+      "t": "Header",
+      "c": [
+        5,
+        [
+          "h5",
+          [],
+          []
+        ],
+        [
+          {
+            "t": "Str",
+            "c": "H5"
+          }
+        ]
+      ]
+    },
+    {
+      "t": "Header",
+      "c": [
+        6,
+        [
+          "h6",
+          [],
+          []
+        ],
+        [
+          {
+            "t": "Str",
+            "c": "H6"
+          }
+        ]
+      ]
+    },
+    {
+      "t": "Header",
+      "c": [
+        2,
+        [
+          "emphasis",
+          [],
+          []
+        ],
+        [
+          {
+            "t": "Str",
+            "c": "Emphasis"
+          }
+        ]
+      ]
+    },
+    {
+      "t": "Para",
+      "c": [
+        {
+          "t": "Emph",
+          "c": [
+            {
+              "t": "Str",
+              "c": "This"
+            },
+            {
+              "t": "Space"
+            },
+            {
+              "t": "Str",
+              "c": "is"
+            },
+            {
+              "t": "Space"
+            },
+            {
+              "t": "Str",
+              "c": "italic"
+            },
+            {
+              "t": "Space"
+            },
+            {
+              "t": "Str",
+              "c": "text."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "t": "Para",
+      "c": [
+        {
+          "t": "Strong",
+          "c": [
+            {
+              "t": "Str",
+              "c": "This"
+            },
+            {
+              "t": "Space"
+            },
+            {
+              "t": "Str",
+              "c": "is"
+            },
+            {
+              "t": "Space"
+            },
+            {
+              "t": "Str",
+              "c": "bold"
+            },
+            {
+              "t": "Space"
+            },
+            {
+              "t": "Str",
+              "c": "text."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "t": "Para",
+      "c": [
+        {
+          "t": "Strong",
+          "c": [
+            {
+              "t": "Emph",
+              "c": [
+                {
+                  "t": "Str",
+                  "c": "This"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "t": "Str",
+                  "c": "is"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "t": "Str",
+                  "c": "bold"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "t": "Str",
+                  "c": "and"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "t": "Str",
+                  "c": "italic"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "t": "Str",
+                  "c": "text."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "t": "Header",
+      "c": [
+        2,
+        [
+          "lists",
+          [],
+          []
+        ],
+        [
+          {
+            "t": "Str",
+            "c": "Lists"
+          }
+        ]
+      ]
+    },
+    {
+      "t": "OrderedList",
+      "c": [
+        [
+          1,
+          {
+            "t": "Decimal"
+          },
+          {
+            "t": "Period"
+          }
+        ],
+        [
+          [
+            {
+              "t": "Plain",
+              "c": [
+                {
+                  "t": "Str",
+                  "c": "Ordered"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "t": "Str",
+                  "c": "list"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "t": "Str",
+                  "c": "item"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "t": "Str",
+                  "c": "1"
+                }
+              ]
+            }
+          ],
+          [
+            {
+              "t": "Plain",
+              "c": [
+                {
+                  "t": "Str",
+                  "c": "Ordered"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "t": "Str",
+                  "c": "list"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "t": "Str",
+                  "c": "item"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "t": "Str",
+                  "c": "2"
+                }
+              ]
+            },
+            {
+              "t": "OrderedList",
+              "c": [
+                [
+                  1,
+                  {
+                    "t": "Decimal"
+                  },
+                  {
+                    "t": "Period"
+                  }
+                ],
+                [
+                  [
+                    {
+                      "t": "Plain",
+                      "c": [
+                        {
+                          "t": "Str",
+                          "c": "Nested"
+                        },
+                        {
+                          "t": "Space"
+                        },
+                        {
+                          "t": "Str",
+                          "c": "ordered"
+                        },
+                        {
+                          "t": "Space"
+                        },
+                        {
+                          "t": "Str",
+                          "c": "list"
+                        },
+                        {
+                          "t": "Space"
+                        },
+                        {
+                          "t": "Str",
+                          "c": "item"
+                        }
+                      ]
+                    }
+                  ],
+                  [
+                    {
+                      "t": "Plain",
+                      "c": [
+                        {
+                          "t": "Str",
+                          "c": "Another"
+                        },
+                        {
+                          "t": "Space"
+                        },
+                        {
+                          "t": "Str",
+                          "c": "nested"
+                        },
+                        {
+                          "t": "Space"
+                        },
+                        {
+                          "t": "Str",
+                          "c": "ordered"
+                        },
+                        {
+                          "t": "Space"
+                        },
+                        {
+                          "t": "Str",
+                          "c": "list"
+                        },
+                        {
+                          "t": "Space"
+                        },
+                        {
+                          "t": "Str",
+                          "c": "item"
+                        }
+                      ]
+                    }
+                  ]
+                ]
+              ]
+            }
+          ]
+        ]
+      ]
+    },
+    {
+      "t": "BulletList",
+      "c": [
+        [
+          {
+            "t": "Plain",
+            "c": [
+              {
+                "t": "Str",
+                "c": "Unordered"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "t": "Str",
+                "c": "list"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "t": "Str",
+                "c": "item"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "t": "Str",
+                "c": "1"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "t": "Plain",
+            "c": [
+              {
+                "t": "Str",
+                "c": "Unordered"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "t": "Str",
+                "c": "list"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "t": "Str",
+                "c": "item"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "t": "Str",
+                "c": "2"
+              }
+            ]
+          },
+          {
+            "t": "BulletList",
+            "c": [
+              [
+                {
+                  "t": "Plain",
+                  "c": [
+                    {
+                      "t": "Str",
+                      "c": "Nested"
+                    },
+                    {
+                      "t": "Space"
+                    },
+                    {
+                      "t": "Str",
+                      "c": "unordered"
+                    },
+                    {
+                      "t": "Space"
+                    },
+                    {
+                      "t": "Str",
+                      "c": "list"
+                    },
+                    {
+                      "t": "Space"
+                    },
+                    {
+                      "t": "Str",
+                      "c": "item"
+                    }
+                  ]
+                }
+              ],
+              [
+                {
+                  "t": "Plain",
+                  "c": [
+                    {
+                      "t": "Str",
+                      "c": "Another"
+                    },
+                    {
+                      "t": "Space"
+                    },
+                    {
+                      "t": "Str",
+                      "c": "nested"
+                    },
+                    {
+                      "t": "Space"
+                    },
+                    {
+                      "t": "Str",
+                      "c": "unordered"
+                    },
+                    {
+                      "t": "Space"
+                    },
+                    {
+                      "t": "Str",
+                      "c": "list"
+                    },
+                    {
+                      "t": "Space"
+                    },
+                    {
+                      "t": "Str",
+                      "c": "item"
+                    }
+                  ]
+                }
+              ]
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "t": "Header",
+      "c": [
+        2,
+        [
+          "task-lists",
+          [],
+          []
+        ],
+        [
+          {
+            "t": "Str",
+            "c": "Task"
+          },
+          {
+            "t": "Space"
+          },
+          {
+            "t": "Str",
+            "c": "Lists"
+          }
+        ]
+      ]
+    },
+    {
+      "t": "BulletList",
+      "c": [
+        [
+          {
+            "t": "Plain",
+            "c": [
+              {
+                "t": "Str",
+                "c": "Ôśĺ"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "t": "Str",
+                "c": "Completed"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "t": "Str",
+                "c": "task"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "t": "Plain",
+            "c": [
+              {
+                "t": "Str",
+                "c": "ÔśÉ"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "t": "Str",
+                "c": "Incomplete"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "t": "Str",
+                "c": "task"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "t": "Plain",
+            "c": [
+              {
+                "t": "Str",
+                "c": "ÔśÉ"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "t": "Str",
+                "c": "Another"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "t": "Str",
+                "c": "incomplete"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "t": "Str",
+                "c": "task"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "t": "Header",
+      "c": [
+        2,
+        [
+          "links",
+          [],
+          []
+        ],
+        [
+          {
+            "t": "Str",
+            "c": "Links"
+          }
+        ]
+      ]
+    },
+    {
+      "t": "Para",
+      "c": [
+        {
+          "t": "Link",
+          "c": [
+            [
+              "",
+              [],
+              []
+            ],
+            [
+              {
+                "t": "Str",
+                "c": "Link"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "t": "Str",
+                "c": "to"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "t": "Str",
+                "c": "Google"
+              }
+            ],
+            [
+              "https://www.google.com/",
+              ""
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "t": "Header",
+      "c": [
+        2,
+        [
+          "images",
+          [],
+          []
+        ],
+        [
+          {
+            "t": "Str",
+            "c": "Images"
+          }
+        ]
+      ]
+    },
+    {
+      "t": "Figure",
+      "c": [
+        [
+          "",
+          [],
+          []
+        ],
+        [
+          null,
+          [
+            {
+              "t": "Plain",
+              "c": [
+                {
+                  "t": "Str",
+                  "c": "GitHub"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "t": "Str",
+                  "c": "Logo"
+                }
+              ]
+            }
+          ]
+        ],
+        [
+          {
+            "t": "Plain",
+            "c": [
+              {
+                "t": "Image",
+                "c": [
+                  [
+                    "",
+                    [],
+                    []
+                  ],
+                  [
+                    {
+                      "t": "Str",
+                      "c": "GitHub"
+                    },
+                    {
+                      "t": "Space"
+                    },
+                    {
+                      "t": "Str",
+                      "c": "Logo"
+                    }
+                  ],
+                  [
+                    "https://github.githubassets.com/images/modules/logos_page/Octocat.png",
+                    ""
+                  ]
+                ]
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "t": "Header",
+      "c": [
+        2,
+        [
+          "code",
+          [],
+          []
+        ],
+        [
+          {
+            "t": "Str",
+            "c": "Code"
+          }
+        ]
+      ]
+    },
+    {
+      "t": "Para",
+      "c": [
+        {
+          "t": "Str",
+          "c": "Inline"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "t": "Code",
+          "c": [
+            [
+              "",
+              [],
+              []
+            ],
+            "code"
+          ]
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "t": "Str",
+          "c": "and"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "t": "Str",
+          "c": "code"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "t": "Str",
+          "c": "blocks:"
+        }
+      ]
+    },
+    {
+      "t": "CodeBlock",
+      "c": [
+        [
+          "",
+          [
+            "python"
+          ],
+          []
+        ],
+        "def hello_world():\n    print(\"Hello, world!\")"
+      ]
+    },
+    {
+      "t": "Header",
+      "c": [
+        2,
+        [
+          "tables",
+          [],
+          []
+        ],
+        [
+          {
+            "t": "Str",
+            "c": "Tables"
+          }
+        ]
+      ]
+    },
+    {
+      "t": "Table",
+      "c": [
+        [
+          "",
+          [],
+          []
+        ],
+        [
+          null,
+          []
+        ],
+        [
+          [
+            {
+              "t": "AlignDefault"
+            },
+            {
+              "t": "ColWidthDefault"
+            }
+          ],
+          [
+            {
+              "t": "AlignDefault"
+            },
+            {
+              "t": "ColWidthDefault"
+            }
+          ],
+          [
+            {
+              "t": "AlignDefault"
+            },
+            {
+              "t": "ColWidthDefault"
+            }
+          ]
+        ],
+        [
+          [
+            "",
+            [],
+            []
+          ],
+          [
+            [
+              [
+                "",
+                [],
+                []
+              ],
+              [
+                [
+                  [
+                    "",
+                    [],
+                    []
+                  ],
+                  {
+                    "t": "AlignDefault"
+                  },
+                  1,
+                  1,
+                  [
+                    {
+                      "t": "Plain",
+                      "c": [
+                        {
+                          "t": "Str",
+                          "c": "Header"
+                        },
+                        {
+                          "t": "Space"
+                        },
+                        {
+                          "t": "Str",
+                          "c": "1"
+                        }
+                      ]
+                    }
+                  ]
+                ],
+                [
+                  [
+                    "",
+                    [],
+                    []
+                  ],
+                  {
+                    "t": "AlignDefault"
+                  },
+                  1,
+                  1,
+                  [
+                    {
+                      "t": "Plain",
+                      "c": [
+                        {
+                          "t": "Str",
+                          "c": "Header"
+                        },
+                        {
+                          "t": "Space"
+                        },
+                        {
+                          "t": "Str",
+                          "c": "2"
+                        }
+                      ]
+                    }
+                  ]
+                ],
+                [
+                  [
+                    "",
+                    [],
+                    []
+                  ],
+                  {
+                    "t": "AlignDefault"
+                  },
+                  1,
+                  1,
+                  [
+                    {
+                      "t": "Plain",
+                      "c": [
+                        {
+                          "t": "Str",
+                          "c": "Header"
+                        },
+                        {
+                          "t": "Space"
+                        },
+                        {
+                          "t": "Str",
+                          "c": "3"
+                        }
+                      ]
+                    }
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          [
+            [
+              "",
+              [],
+              []
+            ],
+            0,
+            [],
+            [
+              [
+                [
+                  "",
+                  [],
+                  []
+                ],
+                [
+                  [
+                    [
+                      "",
+                      [],
+                      []
+                    ],
+                    {
+                      "t": "AlignDefault"
+                    },
+                    1,
+                    1,
+                    [
+                      {
+                        "t": "Plain",
+                        "c": [
+                          {
+                            "t": "Str",
+                            "c": "Cell"
+                          },
+                          {
+                            "t": "Space"
+                          },
+                          {
+                            "t": "Str",
+                            "c": "1"
+                          }
+                        ]
+                      }
+                    ]
+                  ],
+                  [
+                    [
+                      "",
+                      [],
+                      []
+                    ],
+                    {
+                      "t": "AlignDefault"
+                    },
+                    1,
+                    1,
+                    [
+                      {
+                        "t": "Plain",
+                        "c": [
+                          {
+                            "t": "Str",
+                            "c": "Cell"
+                          },
+                          {
+                            "t": "Space"
+                          },
+                          {
+                            "t": "Str",
+                            "c": "2"
+                          }
+                        ]
+                      }
+                    ]
+                  ],
+                  [
+                    [
+                      "",
+                      [],
+                      []
+                    ],
+                    {
+                      "t": "AlignDefault"
+                    },
+                    1,
+                    1,
+                    [
+                      {
+                        "t": "Plain",
+                        "c": [
+                          {
+                            "t": "Str",
+                            "c": "Cell"
+                          },
+                          {
+                            "t": "Space"
+                          },
+                          {
+                            "t": "Str",
+                            "c": "3"
+                          }
+                        ]
+                      }
+                    ]
+                  ]
+                ]
+              ],
+              [
+                [
+                  "",
+                  [],
+                  []
+                ],
+                [
+                  [
+                    [
+                      "",
+                      [],
+                      []
+                    ],
+                    {
+                      "t": "AlignDefault"
+                    },
+                    1,
+                    1,
+                    [
+                      {
+                        "t": "Plain",
+                        "c": [
+                          {
+                            "t": "Str",
+                            "c": "Cell"
+                          },
+                          {
+                            "t": "Space"
+                          },
+                          {
+                            "t": "Str",
+                            "c": "4"
+                          }
+                        ]
+                      }
+                    ]
+                  ],
+                  [
+                    [
+                      "",
+                      [],
+                      []
+                    ],
+                    {
+                      "t": "AlignDefault"
+                    },
+                    1,
+                    1,
+                    [
+                      {
+                        "t": "Plain",
+                        "c": [
+                          {
+                            "t": "Str",
+                            "c": "Cell"
+                          },
+                          {
+                            "t": "Space"
+                          },
+                          {
+                            "t": "Str",
+                            "c": "5"
+                          }
+                        ]
+                      }
+                    ]
+                  ],
+                  [
+                    [
+                      "",
+                      [],
+                      []
+                    ],
+                    {
+                      "t": "AlignDefault"
+                    },
+                    1,
+                    1,
+                    [
+                      {
+                        "t": "Plain",
+                        "c": [
+                          {
+                            "t": "Str",
+                            "c": "Cell"
+                          },
+                          {
+                            "t": "Space"
+                          },
+                          {
+                            "t": "Str",
+                            "c": "6"
+                          }
+                        ]
+                      }
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          [
+            "",
+            [],
+            []
+          ],
+          []
+        ]
+      ]
+    },
+    {
+      "t": "Header",
+      "c": [
+        2,
+        [
+          "blockquotes",
+          [],
+          []
+        ],
+        [
+          {
+            "t": "Str",
+            "c": "Blockquotes"
+          }
+        ]
+      ]
+    },
+    {
+      "t": "BlockQuote",
+      "c": [
+        {
+          "t": "Para",
+          "c": [
+            {
+              "t": "Str",
+              "c": "This"
+            },
+            {
+              "t": "Space"
+            },
+            {
+              "t": "Str",
+              "c": "is"
+            },
+            {
+              "t": "Space"
+            },
+            {
+              "t": "Str",
+              "c": "a"
+            },
+            {
+              "t": "Space"
+            },
+            {
+              "t": "Str",
+              "c": "blockquote."
+            },
+            {
+              "t": "SoftBreak"
+            },
+            {
+              "t": "Str",
+              "c": "It"
+            },
+            {
+              "t": "Space"
+            },
+            {
+              "t": "Str",
+              "c": "can"
+            },
+            {
+              "t": "Space"
+            },
+            {
+              "t": "Str",
+              "c": "span"
+            },
+            {
+              "t": "Space"
+            },
+            {
+              "t": "Str",
+              "c": "multiple"
+            },
+            {
+              "t": "Space"
+            },
+            {
+              "t": "Str",
+              "c": "lines."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "t": "Header",
+      "c": [
+        2,
+        [
+          "horizontal-rule",
+          [],
+          []
+        ],
+        [
+          {
+            "t": "Str",
+            "c": "Horizontal"
+          },
+          {
+            "t": "Space"
+          },
+          {
+            "t": "Str",
+            "c": "Rule"
+          }
+        ]
+      ]
+    },
+    {
+      "t": "HorizontalRule"
+    },
+    {
+      "t": "Header",
+      "c": [
+        2,
+        [
+          "strikethrough",
+          [],
+          []
+        ],
+        [
+          {
+            "t": "Str",
+            "c": "Strikethrough"
+          }
+        ]
+      ]
+    },
+    {
+      "t": "Para",
+      "c": [
+        {
+          "t": "Strikeout",
+          "c": [
+            {
+              "t": "Str",
+              "c": "This"
+            },
+            {
+              "t": "Space"
+            },
+            {
+              "t": "Str",
+              "c": "text"
+            },
+            {
+              "t": "Space"
+            },
+            {
+              "t": "Str",
+              "c": "is"
+            },
+            {
+              "t": "Space"
+            },
+            {
+              "t": "Str",
+              "c": "strikethrough."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "t": "Header",
+      "c": [
+        2,
+        [
+          "mentioning-users",
+          [],
+          []
+        ],
+        [
+          {
+            "t": "Str",
+            "c": "Mentioning"
+          },
+          {
+            "t": "Space"
+          },
+          {
+            "t": "Str",
+            "c": "Users"
+          }
+        ]
+      ]
+    },
+    {
+      "t": "Para",
+      "c": [
+        {
+          "t": "Cite",
+          "c": [
+            [
+              {
+                "citationId": "username",
+                "citationPrefix": [],
+                "citationSuffix": [],
+                "citationMode": {
+                  "t": "AuthorInText"
+                },
+                "citationNoteNum": 1,
+                "citationHash": 0
+              }
+            ],
+            [
+              {
+                "t": "Str",
+                "c": "@username"
+              }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "t": "Header",
+      "c": [
+        2,
+        [
+          "emoji",
+          [],
+          []
+        ],
+        [
+          {
+            "t": "Str",
+            "c": "Emoji"
+          }
+        ]
+      ]
+    },
+    {
+      "t": "Para",
+      "c": [
+        {
+          "t": "Str",
+          "c": ":smiley:"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "t": "Str",
+          "c": ":rocket:"
+        }
+      ]
+    },
+    {
+      "t": "Header",
+      "c": [
+        2,
+        [
+          "escaping-characters",
+          [],
+          []
+        ],
+        [
+          {
+            "t": "Str",
+            "c": "Escaping"
+          },
+          {
+            "t": "Space"
+          },
+          {
+            "t": "Str",
+            "c": "Characters"
+          }
+        ]
+      ]
+    },
+    {
+      "t": "Para",
+      "c": [
+        {
+          "t": "Str",
+          "c": "*This"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "t": "Str",
+          "c": "is"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "t": "Str",
+          "c": "not"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "t": "Str",
+          "c": "italic*"
+        }
+      ]
+    },
+    {
+      "t": "Header",
+      "c": [
+        2,
+        [
+          "github-specific-features",
+          [],
+          []
+        ],
+        [
+          {
+            "t": "Str",
+            "c": "GitHub-specific"
+          },
+          {
+            "t": "Space"
+          },
+          {
+            "t": "Str",
+            "c": "features"
+          }
+        ]
+      ]
+    },
+    {
+      "t": "Header",
+      "c": [
+        3,
+        [
+          "issue-references",
+          [],
+          []
+        ],
+        [
+          {
+            "t": "Str",
+            "c": "Issue"
+          },
+          {
+            "t": "Space"
+          },
+          {
+            "t": "Str",
+            "c": "references"
+          }
+        ]
+      ]
+    },
+    {
+      "t": "Para",
+      "c": [
+        {
+          "t": "Str",
+          "c": "Referencing"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "t": "Str",
+          "c": "an"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "t": "Str",
+          "c": "issue:"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "t": "Str",
+          "c": "#1"
+        }
+      ]
+    },
+    {
+      "t": "Header",
+      "c": [
+        3,
+        [
+          "pull-request-references",
+          [],
+          []
+        ],
+        [
+          {
+            "t": "Str",
+            "c": "Pull"
+          },
+          {
+            "t": "Space"
+          },
+          {
+            "t": "Str",
+            "c": "request"
+          },
+          {
+            "t": "Space"
+          },
+          {
+            "t": "Str",
+            "c": "references"
+          }
+        ]
+      ]
+    },
+    {
+      "t": "Para",
+      "c": [
+        {
+          "t": "Str",
+          "c": "Referencing"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "t": "Str",
+          "c": "a"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "t": "Str",
+          "c": "pull"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "t": "Str",
+          "c": "request:"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "t": "Str",
+          "c": "#2"
+        }
+      ]
+    },
+    {
+      "t": "Header",
+      "c": [
+        3,
+        [
+          "user-mentions",
+          [],
+          []
+        ],
+        [
+          {
+            "t": "Str",
+            "c": "User"
+          },
+          {
+            "t": "Space"
+          },
+          {
+            "t": "Str",
+            "c": "mentions"
+          }
+        ]
+      ]
+    },
+    {
+      "t": "Para",
+      "c": [
+        {
+          "t": "Str",
+          "c": "Mentioning"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "t": "Str",
+          "c": "a"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "t": "Str",
+          "c": "user:"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "t": "Cite",
+          "c": [
+            [
+              {
+                "citationId": "octocat",
+                "citationPrefix": [],
+                "citationSuffix": [],
+                "citationMode": {
+                  "t": "AuthorInText"
+                },
+                "citationNoteNum": 2,
+                "citationHash": 0
+              }
+            ],
+            [
+              {
+                "t": "Str",
+                "c": "@octocat"
+              }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "t": "Header",
+      "c": [
+        3,
+        [
+          "automatic-linking-of-urls",
+          [],
+          []
+        ],
+        [
+          {
+            "t": "Str",
+            "c": "Automatic"
+          },
+          {
+            "t": "Space"
+          },
+          {
+            "t": "Str",
+            "c": "linking"
+          },
+          {
+            "t": "Space"
+          },
+          {
+            "t": "Str",
+            "c": "of"
+          },
+          {
+            "t": "Space"
+          },
+          {
+            "t": "Str",
+            "c": "URLs"
+          }
+        ]
+      ]
+    },
+    {
+      "t": "Para",
+      "c": [
+        {
+          "t": "Str",
+          "c": "https://github.com/"
+        }
+      ]
+    },
+    {
+      "t": "Header",
+      "c": [
+        3,
+        [
+          "task-list-in-a-table",
+          [],
+          []
+        ],
+        [
+          {
+            "t": "Str",
+            "c": "Task"
+          },
+          {
+            "t": "Space"
+          },
+          {
+            "t": "Str",
+            "c": "list"
+          },
+          {
+            "t": "Space"
+          },
+          {
+            "t": "Str",
+            "c": "in"
+          },
+          {
+            "t": "Space"
+          },
+          {
+            "t": "Str",
+            "c": "a"
+          },
+          {
+            "t": "Space"
+          },
+          {
+            "t": "Str",
+            "c": "table"
+          }
+        ]
+      ]
+    },
+    {
+      "t": "Table",
+      "c": [
+        [
+          "",
+          [],
+          []
+        ],
+        [
+          null,
+          []
+        ],
+        [
+          [
+            {
+              "t": "AlignDefault"
+            },
+            {
+              "t": "ColWidthDefault"
+            }
+          ],
+          [
+            {
+              "t": "AlignDefault"
+            },
+            {
+              "t": "ColWidthDefault"
+            }
+          ]
+        ],
+        [
+          [
+            "",
+            [],
+            []
+          ],
+          [
+            [
+              [
+                "",
+                [],
+                []
+              ],
+              [
+                [
+                  [
+                    "",
+                    [],
+                    []
+                  ],
+                  {
+                    "t": "AlignDefault"
+                  },
+                  1,
+                  1,
+                  [
+                    {
+                      "t": "Plain",
+                      "c": [
+                        {
+                          "t": "Str",
+                          "c": "Task"
+                        }
+                      ]
+                    }
+                  ]
+                ],
+                [
+                  [
+                    "",
+                    [],
+                    []
+                  ],
+                  {
+                    "t": "AlignDefault"
+                  },
+                  1,
+                  1,
+                  [
+                    {
+                      "t": "Plain",
+                      "c": [
+                        {
+                          "t": "Str",
+                          "c": "Status"
+                        }
+                      ]
+                    }
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          [
+            [
+              "",
+              [],
+              []
+            ],
+            0,
+            [],
+            [
+              [
+                [
+                  "",
+                  [],
+                  []
+                ],
+                [
+                  [
+                    [
+                      "",
+                      [],
+                      []
+                    ],
+                    {
+                      "t": "AlignDefault"
+                    },
+                    1,
+                    1,
+                    [
+                      {
+                        "t": "Plain",
+                        "c": [
+                          {
+                            "t": "Str",
+                            "c": "Task"
+                          },
+                          {
+                            "t": "Space"
+                          },
+                          {
+                            "t": "Str",
+                            "c": "1"
+                          }
+                        ]
+                      }
+                    ]
+                  ],
+                  [
+                    [
+                      "",
+                      [],
+                      []
+                    ],
+                    {
+                      "t": "AlignDefault"
+                    },
+                    1,
+                    1,
+                    [
+                      {
+                        "t": "Plain",
+                        "c": [
+                          {
+                            "t": "Str",
+                            "c": "[x]"
+                          },
+                          {
+                            "t": "Space"
+                          },
+                          {
+                            "t": "Str",
+                            "c": "Completed"
+                          }
+                        ]
+                      }
+                    ]
+                  ]
+                ]
+              ],
+              [
+                [
+                  "",
+                  [],
+                  []
+                ],
+                [
+                  [
+                    [
+                      "",
+                      [],
+                      []
+                    ],
+                    {
+                      "t": "AlignDefault"
+                    },
+                    1,
+                    1,
+                    [
+                      {
+                        "t": "Plain",
+                        "c": [
+                          {
+                            "t": "Str",
+                            "c": "Task"
+                          },
+                          {
+                            "t": "Space"
+                          },
+                          {
+                            "t": "Str",
+                            "c": "2"
+                          }
+                        ]
+                      }
+                    ]
+                  ],
+                  [
+                    [
+                      "",
+                      [],
+                      []
+                    ],
+                    {
+                      "t": "AlignDefault"
+                    },
+                    1,
+                    1,
+                    [
+                      {
+                        "t": "Plain",
+                        "c": [
+                          {
+                            "t": "Str",
+                            "c": "["
+                          },
+                          {
+                            "t": "Space"
+                          },
+                          {
+                            "t": "Str",
+                            "c": "]"
+                          },
+                          {
+                            "t": "Space"
+                          },
+                          {
+                            "t": "Str",
+                            "c": "Incomplete"
+                          }
+                        ]
+                      }
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          [
+            "",
+            [],
+            []
+          ],
+          []
+        ]
+      ]
+    }
+  ]
+}
