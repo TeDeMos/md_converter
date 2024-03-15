@@ -8,16 +8,16 @@ type Double = f64;
 type Text = String;
 type Map<T, K> = HashMap<T, K>;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Pandoc {
     pub meta: Meta,
     pub blocks: Vec<Block>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default, PartialEq)]
 pub struct Meta(pub Map<Text, MetaValue>);
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(untagged)]
 pub enum MetaValue {
     Map(Map<Text, MetaValue>),
@@ -28,7 +28,7 @@ pub enum MetaValue {
     Blocks(Vec<Block>),
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(tag = "t", content = "c")]
 pub enum Block {
     Plain(Vec<Inline>),
@@ -47,7 +47,7 @@ pub enum Block {
     Div(Attr, Vec<Block>),
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(tag = "t", content = "c")]
 pub enum Inline {
     Str(Text),
@@ -74,33 +74,33 @@ pub enum Inline {
 
 type Attr = (Text, Vec<Text>, Vec<(Text, Text)>);
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Format(pub Text);
 
 type ListAttributes = (Int, ListNumberStyle, ListNumberDelim);
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Caption(pub Option<ShortCaption>, pub Vec<Block>);
 
 type ColSpec = (Alignment, ColWidth);
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct TableHead(pub Attr, pub Vec<Row>);
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct TableBody(pub Attr, pub RowHeadColumns, pub Vec<Row>, pub Vec<Row>);
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct TableFoot(pub Attr, pub Vec<Row>);
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(tag = "t")]
 pub enum QuoteType {
     SingleQuote,
     DoubleQuote,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(tag = "t")]
 pub struct Citation {
     #[serde(rename = "citationId")]
@@ -117,7 +117,7 @@ pub struct Citation {
     pub hash: Int,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(tag = "t")]
 pub enum MathType {
     DisplayMath,
@@ -126,7 +126,7 @@ pub enum MathType {
 
 type Target = (Text, Text);
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(tag = "t")]
 pub enum ListNumberStyle {
     DefaultStyle,
@@ -138,7 +138,7 @@ pub enum ListNumberStyle {
     UpperAlpha,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(tag = "t")]
 pub enum ListNumberDelim {
     DefaultDelim,
@@ -149,7 +149,7 @@ pub enum ListNumberDelim {
 
 type ShortCaption = Vec<Inline>;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(tag = "t")]
 pub enum Alignment {
     #[serde(rename = "AlignLeft")]
@@ -162,20 +162,20 @@ pub enum Alignment {
     Default,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(tag = "t")]
 pub enum ColWidth {
     ColWidth(Double),
     ColWidthDefault,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Row(pub Attr, pub Vec<Cell>);
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct RowHeadColumns(pub Int);
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(tag = "t")]
 pub enum CitationMode {
     AuthorInText,
@@ -183,11 +183,11 @@ pub enum CitationMode {
     NormalCitation,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Cell(pub Attr, pub Alignment, pub RowSpan, pub ColSpan, pub Vec<Block>);
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct RowSpan(pub Int);
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct ColSpan(pub Int);
