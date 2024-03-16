@@ -2,7 +2,7 @@ use std::iter;
 use std::iter::Peekable;
 use std::str::Chars;
 
-use crate::ast::{Block, Meta, Pandoc};
+use crate::ast::{attr_empty, Block, Meta, Pandoc};
 use crate::inline_parser::InlineParser;
 use crate::traits::AstReader;
 
@@ -36,6 +36,8 @@ impl MdReader {
             }
             if let Some(b) = ThematicBreak::begin(line) {
                 temp = Some(Box::new(b));
+            } else if let Some(ah) = AtxHeading::begin(line) {
+                temp = Some(Box::new(ah));
             } else if let Some(p) = Paragraph::begin(line) {
                 temp = Some(Box::new(p));
             }
@@ -103,6 +105,52 @@ impl TempBlock for ThematicBreak {
     }
 }
 
+struct AtxHeading(i32, String);
+
+impl AtxHeading {
+    fn take(&mut self) -> String { std::mem::replace(&mut self.1, String::new()) }
+}
+
+impl TempBlock for AtxHeading {
+    fn begin(line: &str) -> Option<Self>
+    where Self: Sized {
+        let (indent, mut iter) = skip_indent(line);
+        if indent >= 4 {
+            return None;
+        }
+        let mut count = 0;
+        while let Some(&'#') = iter.peek() {
+            iter.next();
+            count += 1;
+        }
+        if !((1..=6).contains(&count) && matches!(iter.next(), None | Some(' '))) {
+            return None;
+        }
+        while matches!(iter.peek(), Some(' ' | '\t')) {
+            iter.next();
+        }
+        let mut rest: String = iter.collect();
+        rest.truncate(rest.trim_end().len());
+        let mut trailing = 0;
+        let mut rev = rest.chars().rev().peekable();
+        while rev.next_if_eq(&'#').is_some() {
+            trailing += 1;
+        }
+        if trailing >= 1 && matches!(rev.peek(), Some(&' ') | None) {
+            rest.truncate((rest.len() - trailing).saturating_sub(1));
+        }
+        Some(Self(count, rest))
+    }
+
+    fn check_line(&mut self, _: &str) -> LineResult {
+        LineResult::BlockFinished(Block::Header(
+            self.0,
+            attr_empty(),
+            InlineParser::parse(vec![self.take()]),
+        ))
+    }
+}
+
 struct Paragraph(Vec<String>);
 
 impl Paragraph {
@@ -121,6 +169,8 @@ impl TempBlock for Paragraph {
     fn check_line(&mut self, line: &str) -> LineResult {
         if let Some(t) = ThematicBreak::begin(line) {
             LineResult::BlockSplit(Some(Block::Para(InlineParser::parse(self.take()))), Box::new(t))
+        } else if let Some(ah) = AtxHeading::begin(line) {
+            LineResult::BlockSplit(Some(Block::Para(InlineParser::parse(self.take()))), Box::new(ah))
         } else if line.chars().any(|c| c != ' ' && c != '\t') {
             self.0.push(line.to_owned());
             LineResult::Consumed
@@ -182,6 +232,22 @@ mod tests {
                 "Foo\n---\nbar", "* Foo\n* * *\n* Bar", "- Foo\n- * * *",
             ],
             13,
+        );
+    }
+
+    #[test]
+    fn test_atx_header() {
+        test(
+            vec![
+                "# foo\n## foo\n### foo\n#### foo\n##### foo\n###### foo", "####### foo",
+                "#5 bolt\n\n#hashtag", "\\## *bar* \\*baz\\*",
+                "#                  foo                     ", " ### foo\n  ## foo\n   # foo",
+                "    # foo", "foo\n    # bar", "## foo ##\n  ###   bar    ###",
+                "# foo ##################################\n##### foo ##", "### foo ###     ",
+                "### foo ### b", "# foo#", "### foo \\###\n## foo #\\##\n# foo \\#",
+                "****\n## foo\n****", "Foo bar\n# baz\nBar foo", "## \n#\n### ###",
+            ],
+            32,
         );
     }
 }

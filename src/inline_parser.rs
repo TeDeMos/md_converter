@@ -13,7 +13,7 @@ impl InlineParser {
                 if space {
                     if !matches!(c, ' ' | '\t') {
                         result.push(Inline::Space);
-                        space = !space;
+                        space = false;
                         current.push(c);
                     }
                 } else {
@@ -26,7 +26,9 @@ impl InlineParser {
                     }
                 }
             }
-            result.push(Inline::Str(current));
+            if !current.is_empty() {
+                result.push(Inline::Str(current));
+            }
             result.push(Inline::SoftBreak);
         }
         result.pop();

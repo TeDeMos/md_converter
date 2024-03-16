@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use derivative::Derivative;
 use serde::{Deserialize, Serialize};
 
 type Bool = bool;
@@ -28,8 +29,9 @@ pub enum MetaValue {
     Blocks(Vec<Block>),
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Derivative)]
 #[serde(tag = "t", content = "c")]
+#[derivative(PartialEq)]
 pub enum Block {
     Plain(Vec<Inline>),
     Para(Vec<Inline>),
@@ -40,7 +42,7 @@ pub enum Block {
     OrderedList(ListAttributes, Vec<Vec<Block>>),
     BulletList(Vec<Vec<Block>>),
     DefinitionList(Vec<(Vec<Inline>, Vec<Vec<Block>>)>),
-    Header(Int, Attr, Vec<Inline>),
+    Header(Int, #[derivative(PartialEq = "ignore")] Attr, Vec<Inline>),
     HorizontalRule,
     Table(Attr, Caption, Vec<ColSpec>, TableHead, Vec<TableBody>, TableFoot),
     Figure(Attr, Caption, Vec<Block>),
@@ -73,6 +75,8 @@ pub enum Inline {
 }
 
 type Attr = (Text, Vec<Text>, Vec<(Text, Text)>);
+
+pub fn attr_empty() -> Attr { ("".into(), vec![], vec![]) }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Format(pub Text);
