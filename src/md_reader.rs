@@ -2,34 +2,29 @@ use std::iter;
 use std::iter::Peekable;
 use std::str::Chars;
 
-use crate::ast::{attr_empty, Block, Meta, Pandoc};
+use crate::ast::{attr_empty, Block, Pandoc};
 use crate::inline_parser::InlineParser;
-use crate::traits::AstReader;
 
-pub struct MdReader {
-    source: String,
-}
-
-impl AstReader for MdReader {
-    type ReadError = ();
-
-    fn read(source: String) -> Result<Pandoc, Self::ReadError> { Self { source }.parse() }
-}
+pub struct MdReader;
 
 impl MdReader {
-    fn parse(&mut self) -> Result<Pandoc, <Self as AstReader>::ReadError> {
+    fn parse(source: &str) -> Pandoc {
         let mut temp: Option<Box<dyn TempBlock>> = None;
         let mut result: Vec<Block> = Vec::new();
-        for line in self.source.lines().chain(iter::once("")) {
+        for line in source.lines().chain(iter::once("")) {
             match temp.as_mut() {
                 Some(b) => match b.check_line(line) {
                     LineResult::Consumed => continue,
-                    LineResult::BlockFinished(b) => result.push(b),
+                    LineResult::BlockFinished(b) => {
+                        result.push(b);
+                        temp = None;
+                    },
                     LineResult::BlockSplit(finished, current) => {
                         if let Some(b) = finished {
                             result.push(b);
                         }
                         temp = Some(current);
+                        continue;
                     },
                 },
                 _ => {},
@@ -42,7 +37,7 @@ impl MdReader {
                 temp = Some(Box::new(p));
             }
         }
-        Ok(Pandoc { meta: Meta::default(), blocks: result })
+        Pandoc { blocks: result, ..Default::default() }
     }
 }
 
@@ -131,13 +126,9 @@ impl TempBlock for AtxHeading {
         }
         let mut rest: String = iter.collect();
         rest.truncate(rest.trim_end().len());
-        let mut trailing = 0;
-        let mut rev = rest.chars().rev().peekable();
-        while rev.next_if_eq(&'#').is_some() {
-            trailing += 1;
-        }
-        if trailing >= 1 && matches!(rev.peek(), Some(&' ') | None) {
-            rest.truncate((rest.len() - trailing).saturating_sub(1));
+        let no_trailing = rest.trim_end_matches('#');
+        if matches!(no_trailing.chars().next_back(), Some(' ') | None) {
+            rest.truncate(no_trailing.len());
         }
         Some(Self(count, rest))
     }
@@ -146,7 +137,44 @@ impl TempBlock for AtxHeading {
         LineResult::BlockFinished(Block::Header(
             self.0,
             attr_empty(),
-            InlineParser::parse(vec![self.take()]),
+            InlineParser::parse_atx_heading(self.take()),
+        ))
+    }
+}
+
+struct SetextHeading(i32, Vec<String>);
+
+impl SetextHeading {
+    fn take(&mut self) -> Vec<String> { std::mem::replace(&mut self.1, Vec::new()) }
+}
+
+impl SetextHeading {
+    fn check_after_paragraph(line: &str) -> Option<i32> {
+        let (indent, _) = skip_indent(line);
+        if indent >= 4 {
+            return None;
+        }
+        let mut chars = line.trim().chars();
+        let Some(first @ ('=' | '-')) = chars.next() else { return None };
+        return if chars.all(|c| c == first) {
+            Some(if first == '=' { 1 } else { 2 })
+        } else {
+            None
+        };
+    }
+}
+
+impl TempBlock for SetextHeading {
+    fn begin(_: &str) -> Option<Self>
+    where Self: Sized {
+        None
+    }
+
+    fn check_line(&mut self, _: &str) -> LineResult {
+        LineResult::BlockFinished(Block::Header(
+            self.0,
+            attr_empty(),
+            InlineParser::parse_setext_heading(self.take()),
         ))
     }
 }
@@ -167,15 +195,23 @@ impl TempBlock for Paragraph {
     }
 
     fn check_line(&mut self, line: &str) -> LineResult {
-        if let Some(t) = ThematicBreak::begin(line) {
-            LineResult::BlockSplit(Some(Block::Para(InlineParser::parse(self.take()))), Box::new(t))
+        if let Some(i) = SetextHeading::check_after_paragraph(line) {
+            LineResult::BlockSplit(None, Box::new(SetextHeading(i, self.take())))
+        } else if let Some(t) = ThematicBreak::begin(line) {
+            LineResult::BlockSplit(
+                Some(Block::Para(InlineParser::parse_paragraph(self.take()))),
+                Box::new(t),
+            )
         } else if let Some(ah) = AtxHeading::begin(line) {
-            LineResult::BlockSplit(Some(Block::Para(InlineParser::parse(self.take()))), Box::new(ah))
+            LineResult::BlockSplit(
+                Some(Block::Para(InlineParser::parse_paragraph(self.take()))),
+                Box::new(ah),
+            )
         } else if line.chars().any(|c| c != ' ' && c != '\t') {
             self.0.push(line.to_owned());
             LineResult::Consumed
         } else {
-            LineResult::BlockFinished(Block::Para(InlineParser::parse(self.take())))
+            LineResult::BlockFinished(Block::Para(InlineParser::parse_paragraph(self.take())))
         }
     }
 }
@@ -198,12 +234,19 @@ mod tests {
                 .spawn()
                 .unwrap();
             child.stdin.as_mut().unwrap().write_all(e.as_bytes()).unwrap();
-            let expected: Pandoc = serde_json::from_str(
-                std::str::from_utf8(&child.wait_with_output().unwrap().stdout).unwrap(),
-            )
-            .unwrap();
-            let result = MdReader::read(e.into()).unwrap();
             let number = i + offset;
+            let expected = if number == 68 {
+                Pandoc {
+                    blocks: vec![Block::HorizontalRule, Block::HorizontalRule],
+                    ..Default::default()
+                }
+            } else {
+                serde_json::from_str(
+                    std::str::from_utf8(&child.wait_with_output().unwrap().stdout).unwrap(),
+                )
+                .unwrap()
+            };
+            let result = MdReader::parse(e);
             if result.blocks == expected.blocks {
                 println!("\x1b[32mExample {} : success", number);
                 println!("Input:\n{}", e);
@@ -249,5 +292,23 @@ mod tests {
             ],
             32,
         );
+    }
+
+    #[test]
+    fn test_sentext_header() {
+        test(
+            vec![
+                "Foo *bar*\n=========\n\nFoo *bar*\n---------", "Foo *bar\nbaz*\n====",
+                "  Foo *bar\nbaz*\t\n====", "Foo\n-------------------------\n\nFoo\n=",
+                "   Foo\n---\n\n  Foo\n-----\n\n  Foo\n  ===", "    Foo\n    ---\n\n    Foo\n---",
+                "Foo\n   ----      ", "Foo\n    ---", "Foo\n= =\n\nFoo\n--- -", "Foo  \n-----",
+                "Foo\\\n----", "`Foo\n----\n`\n\n<a title=\"a lot\n---\nof dashes\"/>",
+                "> Foo\n---", "> foo\nbar\n===", "- Foo\n---", "Foo\nBar\n---",
+                "---\nFoo\n---\nBar\n---\nBaz", "\n====", "---\n---", "- foo\n-----",
+                "    foo\n---", "> foo\n-----", "\\> foo\n------", "Foo\n\nbar\n---\nbaz",
+                "Foo\nbar\n\n---\n\nbaz", "Foo\nbar\n* * *\nbaz", "Foo\nbar\n\\---\nbaz",
+            ],
+            50,
+        )
     }
 }

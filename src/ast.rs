@@ -9,7 +9,7 @@ type Double = f64;
 type Text = String;
 type Map<T, K> = HashMap<T, K>;
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Default, PartialEq)]
 pub struct Pandoc {
     pub meta: Meta,
     pub blocks: Vec<Block>,
