@@ -1,4 +1,3 @@
-use std::iter;
 use std::iter::Peekable;
 use std::str::Chars;
 
@@ -9,209 +8,302 @@ pub struct MdReader;
 
 impl MdReader {
     fn parse(source: &str) -> Pandoc {
-        let mut temp: Option<Box<dyn TempBlock>> = None;
+        let mut current = CurrentBlock::None;
         let mut result: Vec<Block> = Vec::new();
-        for line in source.lines().chain(iter::once("")) {
-            match temp.as_mut() {
-                Some(b) => match b.check_line(line) {
-                    LineResult::Consumed => continue,
-                    LineResult::BlockFinished(b) => {
-                        result.push(b);
-                        temp = None;
-                    },
-                    LineResult::BlockSplit(finished, current) => {
-                        if let Some(b) = finished {
-                            result.push(b);
-                        }
-                        temp = Some(current);
-                        continue;
-                    },
-                },
-                _ => {},
-            }
-            if let Some(b) = ThematicBreak::begin(line) {
-                temp = Some(Box::new(b));
-            } else if let Some(ah) = AtxHeading::begin(line) {
-                temp = Some(Box::new(ah));
-            } else if let Some(p) = Paragraph::begin(line) {
-                temp = Some(Box::new(p));
-            }
+        for line in source.lines() {
+            current.next_line(line, &mut result);
+        }
+        if let Some(new) = current.finish() {
+            result.push(new);
         }
         Pandoc { blocks: result, ..Default::default() }
     }
 }
 
-enum LineResult {
+enum CurrentBlock {
+    None,
+    Paragraph(Vec<String>),
+    IndentedCodeBlock(Vec<String>),
+}
+
+enum NextLineResult {
     Consumed,
-    BlockFinished(Block),
-    BlockSplit(Option<Block>, Box<dyn TempBlock>),
+    Started(CurrentBlock),
+    Finished(Block),
+    FinishedAndStarted(Block, CurrentBlock),
+    FinishedTwo(Block, Block),
 }
 
-trait TempBlock {
-    fn begin(line: &str) -> Option<Self>
-    where Self: Sized;
-    fn check_line(&mut self, line: &str) -> LineResult;
+enum SetextHeadingResult {
+    Line,
+    Setext,
+    ThematicBreak,
 }
 
-fn skip_indent(line: &str) -> (i32, Peekable<Chars>) {
-    let mut iter = line.chars().peekable();
-    let mut indent = 0;
-    loop {
-        match iter.peek() {
-            Some('\t') => indent = (indent + 4) / 4,
-            Some(' ') => indent += 1,
-            _ => return (indent, iter),
-        }
-        iter.next();
-    }
-}
-
-struct ThematicBreak;
-
-impl TempBlock for ThematicBreak {
-    fn begin(line: &str) -> Option<Self> {
-        let (indent, mut iter) = skip_indent(line);
-        if indent >= 4 {
-            return None;
-        }
-        let thematic_char = match iter.next() {
-            Some(c @ ('*' | '-' | '_')) => c,
-            _ => return None,
+impl CurrentBlock {
+    fn next_line(&mut self, line: &str, blocks: &mut Vec<Block>) {
+        let result = match self {
+            CurrentBlock::None => Self::none_next(line),
+            CurrentBlock::Paragraph(lines) => Self::paragraph_next(lines, line),
+            CurrentBlock::IndentedCodeBlock(lines) => Self::indented_code_block_next(lines, line),
         };
-        let mut count = 1;
-        for c in iter {
-            if c == ' ' || c == '\t' {
-                continue;
-            } else if c == thematic_char {
-                count += 1;
+        match result {
+            NextLineResult::Started(new) => *self = new,
+            NextLineResult::Finished(block) => {
+                blocks.push(block);
+                *self = Self::None;
+            },
+            NextLineResult::FinishedAndStarted(block, new) => {
+                blocks.push(block);
+                *self = new;
+            },
+            NextLineResult::FinishedTwo(b1, b2) => {
+                blocks.push(b1);
+                blocks.push(b2);
+                *self = Self::None;
+            },
+            NextLineResult::Consumed => {},
+        }
+    }
+
+    fn finish(&mut self) -> Option<Block> {
+        match self {
+            CurrentBlock::None => None,
+            CurrentBlock::Paragraph(lines) => Some(Self::paragraph_finish(lines)),
+            CurrentBlock::IndentedCodeBlock(lines) => Some(Self::indented_code_block_finish(lines)),
+        }
+    }
+
+    fn none_next(line: &str) -> NextLineResult {
+        let (indent, mut iter) = Self::skip_indent(line, 4);
+        if indent >= 4 {
+            if !iter.clone().all(char::is_whitespace) {
+                NextLineResult::Started(Self::start_indented_code_block(&mut iter))
             } else {
-                return None;
+                NextLineResult::Consumed
+            }
+        } else {
+            match iter.next() {
+                Some(c @ ('*' | '_' | '-')) =>
+                    if Self::check_thematic_break(c, &mut iter) {
+                        NextLineResult::Finished(Block::HorizontalRule)
+                    } else {
+                        NextLineResult::Started(Self::start_paragraph(line))
+                    },
+                Some('#') =>
+                    if let Some(heading) = Self::check_atx_heading(&mut iter) {
+                        NextLineResult::Finished(heading)
+                    } else {
+                        NextLineResult::Started(Self::start_paragraph(line))
+                    },
+                _ if !iter.all(char::is_whitespace) =>
+                    NextLineResult::Started(Self::start_paragraph(line)),
+                _ => NextLineResult::Consumed,
             }
         }
-        if count >= 3 {
-            Some(Self)
-        } else {
-            None
-        }
     }
 
-    fn check_line(&mut self, _: &str) -> LineResult {
-        LineResult::BlockFinished(Block::HorizontalRule)
-    }
-}
-
-struct AtxHeading(i32, String);
-
-impl AtxHeading {
-    fn take(&mut self) -> String { std::mem::replace(&mut self.1, String::new()) }
-}
-
-impl TempBlock for AtxHeading {
-    fn begin(line: &str) -> Option<Self>
-    where Self: Sized {
-        let (indent, mut iter) = skip_indent(line);
+    fn paragraph_next(lines: &mut Vec<String>, line: &str) -> NextLineResult {
+        let (indent, mut iter) = Self::skip_indent(line, 4);
         if indent >= 4 {
-            return None;
+            lines.push(line.to_owned());
+            NextLineResult::Consumed
+        } else {
+            match iter.next() {
+                Some('=') =>
+                    if Self::check_setext_heading(&mut iter) {
+                        NextLineResult::Finished(Self::setext_finish(1, lines))
+                    } else {
+                        lines.push(line.to_owned());
+                        NextLineResult::Consumed
+                    },
+                Some('-') => match Self::check_setext_heading_or_thematic_break(&mut iter) {
+                    SetextHeadingResult::Line => {
+                        lines.push(line.to_owned());
+                        NextLineResult::Consumed
+                    },
+                    SetextHeadingResult::ThematicBreak => NextLineResult::FinishedTwo(
+                        Self::paragraph_finish(lines),
+                        Block::HorizontalRule,
+                    ),
+                    SetextHeadingResult::Setext =>
+                        NextLineResult::Finished(Self::setext_finish(2, lines)),
+                },
+                Some(c @ ('*' | '_')) =>
+                    if Self::check_thematic_break(c, &mut iter) {
+                        NextLineResult::FinishedTwo(
+                            Self::paragraph_finish(lines),
+                            Block::HorizontalRule,
+                        )
+                    } else {
+                        lines.push(line.to_owned());
+                        NextLineResult::Consumed
+                    },
+                Some('#') =>
+                    if let Some(heading) = Self::check_atx_heading(&mut iter) {
+                        NextLineResult::FinishedTwo(Self::paragraph_finish(lines), heading)
+                    } else {
+                        lines.push(line.to_owned());
+                        NextLineResult::Consumed
+                    },
+                _ if !iter.all(char::is_whitespace) => {
+                    lines.push(line.to_owned());
+                    NextLineResult::Consumed
+                },
+                _ => NextLineResult::Finished(Self::paragraph_finish(lines)),
+            }
         }
-        let mut count = 0;
-        while let Some(&'#') = iter.peek() {
-            iter.next();
-            count += 1;
-        }
-        if !((1..=6).contains(&count) && matches!(iter.next(), None | Some(' '))) {
-            return None;
-        }
-        while matches!(iter.peek(), Some(' ' | '\t')) {
-            iter.next();
-        }
-        let mut rest: String = iter.collect();
-        rest.truncate(rest.trim_end().len());
-        let no_trailing = rest.trim_end_matches('#');
-        if matches!(no_trailing.chars().next_back(), Some(' ') | None) {
-            rest.truncate(no_trailing.len());
-        }
-        Some(Self(count, rest))
     }
 
-    fn check_line(&mut self, _: &str) -> LineResult {
-        LineResult::BlockFinished(Block::Header(
-            self.0,
-            attr_empty(),
-            InlineParser::parse_atx_heading(self.take()),
-        ))
-    }
-}
-
-struct SetextHeading(i32, Vec<String>);
-
-impl SetextHeading {
-    fn take(&mut self) -> Vec<String> { std::mem::replace(&mut self.1, Vec::new()) }
-}
-
-impl SetextHeading {
-    fn check_after_paragraph(line: &str) -> Option<i32> {
-        let (indent, _) = skip_indent(line);
+    fn indented_code_block_next(lines: &mut Vec<String>, line: &str) -> NextLineResult {
+        let (indent, mut iter) = Self::skip_indent(line, 4);
         if indent >= 4 {
-            return None;
-        }
-        let mut chars = line.trim().chars();
-        let Some(first @ ('=' | '-')) = chars.next() else { return None };
-        return if chars.all(|c| c == first) {
-            Some(if first == '=' { 1 } else { 2 })
+            lines.push(iter.collect());
+            NextLineResult::Consumed
         } else {
-            None
-        };
-    }
-}
-
-impl TempBlock for SetextHeading {
-    fn begin(_: &str) -> Option<Self>
-    where Self: Sized {
-        None
-    }
-
-    fn check_line(&mut self, _: &str) -> LineResult {
-        LineResult::BlockFinished(Block::Header(
-            self.0,
-            attr_empty(),
-            InlineParser::parse_setext_heading(self.take()),
-        ))
-    }
-}
-
-struct Paragraph(Vec<String>);
-
-impl Paragraph {
-    fn take(&mut self) -> Vec<String> { std::mem::replace(&mut self.0, vec![]) }
-}
-
-impl TempBlock for Paragraph {
-    fn begin(line: &str) -> Option<Self> {
-        if line.chars().any(|c| c != ' ' && c != '\t') {
-            Some(Paragraph(vec![line.to_owned()]))
-        } else {
-            None
+            match iter.next() {
+                Some(c @ ('*' | '_' | '-')) =>
+                    if Self::check_thematic_break(c, &mut iter) {
+                        NextLineResult::FinishedTwo(
+                            Self::indented_code_block_finish(lines),
+                            Block::HorizontalRule,
+                        )
+                    } else {
+                        NextLineResult::FinishedAndStarted(
+                            Self::indented_code_block_finish(lines),
+                            Self::start_paragraph(line),
+                        )
+                    },
+                Some('#') =>
+                    if let Some(heading) = Self::check_atx_heading(&mut iter) {
+                        NextLineResult::FinishedTwo(
+                            Self::indented_code_block_finish(lines),
+                            heading,
+                        )
+                    } else {
+                        NextLineResult::FinishedAndStarted(
+                            Self::indented_code_block_finish(lines),
+                            Self::start_paragraph(line),
+                        )
+                    },
+                Some(_) => NextLineResult::FinishedAndStarted(
+                    Self::indented_code_block_finish(lines),
+                    Self::start_paragraph(line),
+                ),
+                _ => {
+                    lines.push(iter.collect());
+                    NextLineResult::Consumed
+                },
+            }
         }
     }
 
-    fn check_line(&mut self, line: &str) -> LineResult {
-        if let Some(i) = SetextHeading::check_after_paragraph(line) {
-            LineResult::BlockSplit(None, Box::new(SetextHeading(i, self.take())))
-        } else if let Some(t) = ThematicBreak::begin(line) {
-            LineResult::BlockSplit(
-                Some(Block::Para(InlineParser::parse_paragraph(self.take()))),
-                Box::new(t),
-            )
-        } else if let Some(ah) = AtxHeading::begin(line) {
-            LineResult::BlockSplit(
-                Some(Block::Para(InlineParser::parse_paragraph(self.take()))),
-                Box::new(ah),
-            )
-        } else if line.chars().any(|c| c != ' ' && c != '\t') {
-            self.0.push(line.to_owned());
-            LineResult::Consumed
-        } else {
-            LineResult::BlockFinished(Block::Para(InlineParser::parse_paragraph(self.take())))
+    fn paragraph_finish(lines: &[String]) -> Block { Block::Para(InlineParser::parse_lines(lines)) }
+
+    fn setext_finish(level: i32, lines: &[String]) -> Block {
+        Block::Header(level, attr_empty(), InlineParser::parse_lines(lines))
+    }
+
+    fn indented_code_block_finish(lines: &mut Vec<String>) -> Block {
+        while let Some(last) = lines.last()
+            && last.chars().all(char::is_whitespace)
+        {
+            lines.pop();
+        }
+        let mut result = String::new();
+        for l in lines {
+            result.push_str(&l);
+            result.push('\n');
+        }
+        result.pop();
+        Block::CodeBlock(attr_empty(), result)
+    }
+
+    fn check_thematic_break(first: char, rest: &mut Peekable<Chars>) -> bool {
+        let mut count = 1;
+        for c in rest {
+            match c {
+                ' ' | '\t' => continue,
+                c if c == first => count += 1,
+                _ => return false,
+            }
+        }
+        count >= 3
+    }
+
+    fn check_atx_heading(rest: &mut Peekable<Chars>) -> Option<Block> {
+        let mut count = 1;
+        loop {
+            match rest.next() {
+                Some('#') if count <= 5 => count += 1,
+                Some(' ') => break,
+                None => return Some(Block::Header(count, attr_empty(), Vec::new())),
+                _ => return None,
+            }
+        }
+        let mut result: String = rest.collect();
+        let trimmed = result.trim_end().trim_end_matches('#');
+        if matches!(trimmed.chars().next_back(), None | Some(' ')) {
+            result.truncate(trimmed.len().saturating_sub(1))
+        }
+        Some(Block::Header(count, attr_empty(), InlineParser::parse_line(&result)))
+    }
+
+    fn check_setext_heading(rest: &mut Peekable<Chars>) -> bool {
+        let mut whitespace = false;
+        loop {
+            match rest.next() {
+                Some('=') if !whitespace => continue,
+                Some(' ' | '\t') => whitespace = true,
+                Some(_) => return false,
+                None => return true,
+            }
+        }
+    }
+
+    fn check_setext_heading_or_thematic_break(rest: &mut Peekable<Chars>) -> SetextHeadingResult {
+        let mut count = 1;
+        let mut whitespace = false;
+        let mut thematic = false;
+        loop {
+            match rest.next() {
+                Some('-') => {
+                    count += 1;
+                    if whitespace {
+                        thematic = true;
+                    }
+                },
+                Some(' ' | '\t') => whitespace = true,
+                Some(_) => return SetextHeadingResult::Line,
+                None =>
+                    return if thematic && count >= 3 {
+                        SetextHeadingResult::ThematicBreak
+                    } else {
+                        SetextHeadingResult::Setext
+                    },
+            }
+        }
+    }
+
+    fn start_paragraph(line: &str) -> CurrentBlock { Self::Paragraph(vec![line.to_owned()]) }
+
+    fn start_indented_code_block(rest: &mut Peekable<Chars>) -> CurrentBlock {
+        Self::IndentedCodeBlock(vec![rest.collect()])
+    }
+
+    fn skip_indent(line: &str, limit: usize) -> (usize, Peekable<Chars>) {
+        let mut iter = line.chars().peekable();
+        let mut indent = 0;
+        loop {
+            match iter.peek() {
+                Some('\t') => indent += 4 - indent % 4,
+                Some(' ') => indent += 1,
+                _ => return (indent, iter),
+            }
+            iter.next();
+            if indent >= limit {
+                return (indent, iter);
+            }
         }
     }
 }
@@ -295,7 +387,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sentext_header() {
+    fn test_setext_header() {
         test(
             vec![
                 "Foo *bar*\n=========\n\nFoo *bar*\n---------", "Foo *bar\nbaz*\n====",
@@ -309,6 +401,21 @@ mod tests {
                 "Foo\nbar\n\n---\n\nbaz", "Foo\nbar\n* * *\nbaz", "Foo\nbar\n\\---\nbaz",
             ],
             50,
+        )
+    }
+
+    #[test]
+    fn test_indented_code_block() {
+        test(
+            vec![
+                "    a simple\n      indented code block", "  - foo\n\n    bar",
+                "1.  foo\n\n    - bar", "    <a/>\n    *hi*\n\n    - one",
+                "    chunk1\n\n    chunk2\n\n\n    chunk3", "    chunk1\n      \n      chunk2",
+                "Foo\n    bar", "    foo\nbar",
+                "# Heading\n    foo\nHeading\n------\n    foo\n----", "        foo\n    bar",
+                "    \n    foo\n    ", "    foo  ",
+            ],
+            77,
         )
     }
 }

@@ -3,32 +3,24 @@ use crate::ast::Inline;
 pub struct InlineParser;
 
 impl InlineParser {
-    pub fn parse_atx_heading(content: String) -> Vec<Inline> {
-        let mut result = Vec::new();
-        Self::parse_line(content, &mut result);
-        result
-    }
-    
-    pub fn parse_setext_heading(lines: Vec<String>) -> Vec<Inline> {
-        Self::parse_lines(lines)
-    }
-    
-    pub fn parse_paragraph(lines: Vec<String>) -> Vec<Inline> {
-        Self::parse_lines(lines)
-    }
-    
-    pub fn parse_lines(lines: Vec<String>) -> Vec<Inline> {
+    pub fn parse_lines(lines: &[String]) -> Vec<Inline> {
         //todo
         let mut result = Vec::new();
         for l in lines {
-            Self::parse_line(l, &mut result);
+            Self::parse_one_line(l, &mut result);
             result.push(Inline::SoftBreak);
         }
         result.pop();
         result
     }
+    
+    pub fn parse_line(line: &str) -> Vec<Inline> {
+        let mut result = Vec::new();
+        Self::parse_one_line(line, &mut result);
+        result
+    }
 
-    pub fn parse_line(line: String, result: &mut Vec<Inline>) {
+    fn parse_one_line(line: &str, result: &mut Vec<Inline>) {
         //todo
         let mut space = false;
         let mut current = String::new();
