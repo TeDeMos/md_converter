@@ -36,7 +36,7 @@ pub enum Block {
     Plain(Vec<Inline>),
     Para(Vec<Inline>),
     LineBlock(Vec<Vec<Inline>>),
-    CodeBlock(Attr, Text),
+    CodeBlock(/*#[derivative(PartialEq = "ignore")]*/ Attr, Text),
     RawBlock(Format, Text),
     BlockQuote(Vec<Block>),
     OrderedList(ListAttributes, Vec<Vec<Block>>),

@@ -24,6 +24,15 @@ enum CurrentBlock {
     None,
     Paragraph(Vec<String>),
     IndentedCodeBlock(Vec<String>),
+    FencedCodeBlock(FencedCodeBlock),
+}
+
+struct FencedCodeBlock {
+    indent: usize,
+    fence_size: usize,
+    fence_char: char,
+    info: String,
+    content: String,
 }
 
 enum NextLineResult {
@@ -46,6 +55,7 @@ impl CurrentBlock {
             CurrentBlock::None => Self::none_next(line),
             CurrentBlock::Paragraph(lines) => Self::paragraph_next(lines, line),
             CurrentBlock::IndentedCodeBlock(lines) => Self::indented_code_block_next(lines, line),
+            CurrentBlock::FencedCodeBlock(code) => Self::fenced_code_block_next(code, line),
         };
         match result {
             NextLineResult::Started(new) => *self = new,
@@ -71,6 +81,7 @@ impl CurrentBlock {
             CurrentBlock::None => None,
             CurrentBlock::Paragraph(lines) => Some(Self::paragraph_finish(lines)),
             CurrentBlock::IndentedCodeBlock(lines) => Some(Self::indented_code_block_finish(lines)),
+            CurrentBlock::FencedCodeBlock(code) => Some(Self::fenced_code_block_finish(code, true)),
         }
     }
 
@@ -84,6 +95,12 @@ impl CurrentBlock {
             }
         } else {
             match iter.next() {
+                Some(c @ ('~' | '`')) =>
+                    if let Some(code) = Self::check_fenced_code_block(indent, c, &mut iter) {
+                        NextLineResult::Started(code)
+                    } else {
+                        NextLineResult::Started(Self::start_paragraph(line))
+                    },
                 Some(c @ ('*' | '_' | '-')) =>
                     if Self::check_thematic_break(c, &mut iter) {
                         NextLineResult::Finished(Block::HorizontalRule)
@@ -139,6 +156,13 @@ impl CurrentBlock {
                         lines.push(line.to_owned());
                         NextLineResult::Consumed
                     },
+                Some(c @ ('~' | '`')) =>
+                    if let Some(code) = Self::check_fenced_code_block(indent, c, &mut iter) {
+                        NextLineResult::FinishedAndStarted(Self::paragraph_finish(lines), code)
+                    } else {
+                        lines.push(line.to_owned());
+                        NextLineResult::Consumed
+                    },
                 Some('#') =>
                     if let Some(heading) = Self::check_atx_heading(&mut iter) {
                         NextLineResult::FinishedTwo(Self::paragraph_finish(lines), heading)
@@ -162,6 +186,18 @@ impl CurrentBlock {
             NextLineResult::Consumed
         } else {
             match iter.next() {
+                Some(c @ ('~' | '`')) =>
+                    if let Some(code) = Self::check_fenced_code_block(indent, c, &mut iter) {
+                        NextLineResult::FinishedAndStarted(
+                            Self::indented_code_block_finish(lines),
+                            code,
+                        )
+                    } else {
+                        NextLineResult::FinishedAndStarted(
+                            Self::indented_code_block_finish(lines),
+                            Self::start_paragraph(line),
+                        )
+                    },
                 Some(c @ ('*' | '_' | '-')) =>
                     if Self::check_thematic_break(c, &mut iter) {
                         NextLineResult::FinishedTwo(
@@ -198,6 +234,38 @@ impl CurrentBlock {
         }
     }
 
+    fn fenced_code_block_next(code: &mut FencedCodeBlock, line: &str) -> NextLineResult {
+        let (indent, mut iter) = Self::skip_indent(line, 4);
+        if indent <= 3 {
+            let mut count = 0;
+            while let Some(c) = iter.next()
+                && c == code.fence_char
+            {
+                count += 1;
+            }
+            if count >= code.fence_size {
+                loop {
+                    match iter.next() {
+                        Some(' ' | '\t') => continue,
+                        Some(_) => break,
+                        None =>
+                            return NextLineResult::Finished(Self::fenced_code_block_finish(code, false)),
+                    }
+                }
+            }
+        }
+        if code.indent > 0 {
+            let (_, iter) = Self::skip_indent(line, code.indent);
+            for c in iter {
+                code.content.push(c);
+            }
+        } else {
+            code.content.push_str(line);
+        }
+        code.content.push('\n');
+        NextLineResult::Consumed
+    }
+
     fn paragraph_finish(lines: &[String]) -> Block { Block::Para(InlineParser::parse_lines(lines)) }
 
     fn setext_finish(level: i32, lines: &[String]) -> Block {
@@ -217,6 +285,20 @@ impl CurrentBlock {
         }
         result.pop();
         Block::CodeBlock(attr_empty(), result)
+    }
+
+    fn fenced_code_block_finish(code: &mut FencedCodeBlock, force_new_line: bool) -> Block {
+        // todo fix this temp solution (String::new() doesn't allocate but still)
+        let mut info = std::mem::replace(&mut code.info, String::new());
+        let mut content = std::mem::replace(&mut code.content, String::new());
+        if !force_new_line {
+            content.pop();
+        }
+        if let Some(n) = info.find(' ') {
+            info.truncate(n)
+        }
+        let info = if info.is_empty() { Vec::new() } else { vec![info] };
+        Block::CodeBlock(("".into(), info, Vec::new()), content)
     }
 
     fn check_thematic_break(first: char, rest: &mut Peekable<Chars>) -> bool {
@@ -283,6 +365,36 @@ impl CurrentBlock {
                     },
             }
         }
+    }
+
+    fn check_fenced_code_block(
+        indent: usize, first: char, rest: &mut Peekable<Chars>,
+    ) -> Option<CurrentBlock> {
+        let mut count = 1;
+        while let Some(c) = rest.peek()
+            && *c == first
+        {
+            count += 1;
+            rest.next();
+        }
+        if count < 3 {
+            return None;
+        }
+        while matches!(rest.peek(), Some(' ' | '\t')) {
+            rest.next();
+        }
+        let mut info: String = rest.collect();
+        info.truncate(info.trim_end().len());
+        if first == '`' && info.contains('`') {
+            return None;
+        }
+        Some(CurrentBlock::FencedCodeBlock(FencedCodeBlock {
+            indent,
+            fence_char: first,
+            fence_size: count,
+            info,
+            content: String::new(),
+        }))
     }
 
     fn start_paragraph(line: &str) -> CurrentBlock { Self::Paragraph(vec![line.to_owned()]) }
@@ -416,6 +528,25 @@ mod tests {
                 "    \n    foo\n    ", "    foo  ",
             ],
             77,
+        )
+    }
+
+    #[test]
+    fn test_fenced_code_block() {
+        test(
+            vec![
+                "```\n<\n >\n```", "~~~\n<\n >\n~~~", "``\nfoo\n``", "```\naaa\n~~~\n```",
+                "~~~\n\naaa\n```\n~~~", "````\naaa\n```\n``````", "~~~~\naaa\n~~~\n~~~~", "```",
+                "`````\n\n```\naaa", "> ```\n> aaa\n\nbbb", "```\n\n  \n```", "```\n```",
+                " ```\n aaa\naaa\n```", "  ```\naaa\n  aaa\naaa\n  ```",
+                "   ```\n   aaa\n    aaa\n  aaa\n   ```", "    ```\n    aaa\n    ```",
+                "```\naaa\n  ```", "   ```\naaa\n  ```", "```\naaa\n    ```", "``` ```\naaa",
+                "~~~~~~\naaa\n~~~ ~~", "foo\n```\nbar\n```\nbaz", "foo\n---\n~~~\nbar\n~~~\n# baz",
+                "```ruby\ndef foo(x)\n  return 3\nend\n```",
+                "~~~~    ruby startline=3 $%@#$\ndef foo(x)\n  return 3\nend\n~~~~~~~",
+                "````;\n````", "``` aa ```\nfoo", "~~~ aa ``` ~~~\nfoo\n~~~", "```\n``` aaa\n```",
+            ],
+            89,
         )
     }
 }
