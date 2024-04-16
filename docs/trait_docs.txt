@@ -1,0 +1,17 @@
+DESCRIPTION:
+Defining basic traits for AST operations
+
+
+TYPES:
+ReadError - Error occured while reading the document and parsing it to the pandoc AST format
+WriteError - Error occured while writting the document from the Pandoc AST format 
+
+TRAITS:
+AstReader - Trait for AST reading operations
+AstWriter - Trait for AST writting operations (implemented for typstWriter, latexWriter)
+
+
+FUNCTIONS:
+write(&mut self, ast: Pandoc) -> Result<String, Self::WriteError> - method outputing a document according to the created pandoc AST
+
+read(str: String) -> Result<Pandoc, Self::ReadError> - method for creating the pandoc AST from a document

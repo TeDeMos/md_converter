@@ -1,0 +1,51 @@
+DESCRIPTION:
+script containing the structure of blocks and inlines without parsing methods
+
+
+TYPES:
+- Bool            ---> bool
+- Int             ---> i32
+- Double          ---> f64
+- Text            ---> String
+- Map             ---> Hashmap
+- Attr            ---> (Text, Vec<Text>, Vec<(Text, Text)>) ???
+- ListAttributes  ---> (Int, ListNumberStyle, ListNumberDelim)
+- ColSpec         ---> (Alignment, ColWidth)
+- Target          ---> (Text, Text)
+- ShortCaption    ---> Vec<Inline>
+
+
+ENUMS:
+Block           - enum containing every possible block type (look github-flavoured markdown docs)
+Inline          - enum containing every possible Inline type (look github-flavoured markdown docs)
+QuoteType       - enum containing possible QuoteTypes (SingleQuote, DoubleQuote)
+MetaValue       - enum containing every possible struct representing metadata
+MathType        - enum containing the MathType inline component 
+ListNumberStyle - ???
+ListNumberDelim - enum describing possible delimeters
+Alignment       - enum needed for describing column styling for Table inlines
+ColWidth        - enum needed for describing column styling for Table inlines
+CitationMode    - enum needed for describing the mode in the Citation inline 
+
+
+STRUCTS:
+Pandoc          - struct containing the metadata and vector of blocks
+Meta            - struct mapping text identifier to Metavalue
+Format          - ???
+Caption         - struct containing the caption block component
+TableHead       - struct containing the TableHead block component
+TableBody       - struct containing the TableBody block component
+TableFoot       - struct containing the TableFoot block component
+Citation        - struct containing the Citation inline component
+Row             - struct containing row attributes and Cell data for Table inlines
+RowHeadColumns  - ???
+Cell            - struct containing Blocks, attributes, styling of a Table Cell
+ColSpan         - ???
+RowSpan         - ???
+
+
+
+FUNCTIONS:
+attr_empty - function for returning an empty attribute
+
+

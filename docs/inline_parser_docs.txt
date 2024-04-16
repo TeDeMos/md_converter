@@ -1,0 +1,17 @@
+DESCRIPTION:
+module for implementing InlineParsing methods for the InlineParser structure
+
+
+STRUCTS:
+InlineParser - structure containing inline parsing methods
+
+METHODS:
+pub parse_lines(&[String]) -> Vec<Inline>:
+interface method for parsing multiple lines, it uses the parse_one_line method 
+inserts a softbreak after each line passed into the parse_one_line method
+
+pub parse_line(&str) -> Vec<Inline>:
+interface method for parsing just one line, it uses the parse_one_line method for actual parsing
+
+parse_one_line(&str, &mut Vec<Inline>):
+method for parsing inlines from just one line input returns a Vector of Inlines
