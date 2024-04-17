@@ -153,7 +153,7 @@ pub enum ListNumberDelim {
 
 type ShortCaption = Vec<Inline>;
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 #[serde(tag = "t")]
 pub enum Alignment {
     #[serde(rename = "AlignLeft")]

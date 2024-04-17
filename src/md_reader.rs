@@ -1,13 +1,17 @@
+use std::iter;
 use std::iter::Peekable;
 use std::str::Chars;
 
-use crate::ast::{attr_empty, Block, Pandoc};
+use crate::ast::{
+    attr_empty, Alignment, Block, Caption, Cell, ColSpan, ColWidth, Pandoc, Row, RowHeadColumns,
+    RowSpan, TableBody, TableFoot, TableHead,
+};
 use crate::inline_parser::InlineParser;
 
 pub struct MdReader;
 
 impl MdReader {
-    fn parse(source: &str) -> Pandoc {
+    pub fn parse(source: &str) -> Pandoc {
         let mut current = CurrentBlock::None;
         let mut result: Vec<Block> = Vec::new();
         for line in source.lines() {
@@ -20,11 +24,17 @@ impl MdReader {
     }
 }
 
-enum CurrentBlock {
+pub enum CurrentBlock {
     None,
-    Paragraph(Vec<String>),
+    Paragraph(Paragraph),
     IndentedCodeBlock(Vec<String>),
     FencedCodeBlock(FencedCodeBlock),
+    Table(Table),
+}
+
+struct Paragraph {
+    lines: Vec<String>,
+    table_header_length: usize,
 }
 
 struct FencedCodeBlock {
@@ -43,6 +53,12 @@ enum NextLineResult {
     FinishedTwo(Block, Block),
 }
 
+struct Table {
+    size: usize,
+    alignments: Vec<Alignment>,
+    rows: Vec<Vec<String>>,
+}
+
 enum SetextHeadingResult {
     Line,
     Setext,
@@ -53,9 +69,10 @@ impl CurrentBlock {
     fn next_line(&mut self, line: &str, blocks: &mut Vec<Block>) {
         let result = match self {
             CurrentBlock::None => Self::none_next(line),
-            CurrentBlock::Paragraph(lines) => Self::paragraph_next(lines, line),
+            CurrentBlock::Paragraph(paragraph) => Self::paragraph_next(paragraph, line),
             CurrentBlock::IndentedCodeBlock(lines) => Self::indented_code_block_next(lines, line),
             CurrentBlock::FencedCodeBlock(code) => Self::fenced_code_block_next(code, line),
+            CurrentBlock::Table(table) => Self::table_next(table, line),
         };
         match result {
             NextLineResult::Started(new) => *self = new,
@@ -79,40 +96,36 @@ impl CurrentBlock {
     fn finish(&mut self) -> Option<Block> {
         match self {
             CurrentBlock::None => None,
-            CurrentBlock::Paragraph(lines) => Some(Self::paragraph_finish(lines)),
+            CurrentBlock::Paragraph(paragraph) =>
+                Some(Self::paragraph_finish(&mut paragraph.lines)),
             CurrentBlock::IndentedCodeBlock(lines) => Some(Self::indented_code_block_finish(lines)),
             CurrentBlock::FencedCodeBlock(code) => Some(Self::fenced_code_block_finish(code, true)),
+            CurrentBlock::Table(table) => Some(Self::finish_table(table)),
         }
     }
 
     fn none_next(line: &str) -> NextLineResult {
         let (indent, mut iter) = Self::skip_indent(line, 4);
         if indent >= 4 {
-            if !iter.clone().all(char::is_whitespace) {
-                NextLineResult::Started(Self::start_indented_code_block(&mut iter))
-            } else {
-                NextLineResult::Consumed
+            match iter.clone().all(char::is_whitespace) {
+                true => NextLineResult::Consumed,
+                false => NextLineResult::Started(Self::start_indented_code_block(&mut iter)),
             }
         } else {
             match iter.next() {
                 Some(c @ ('~' | '`')) =>
-                    if let Some(code) = Self::check_fenced_code_block(indent, c, &mut iter) {
-                        NextLineResult::Started(code)
-                    } else {
-                        NextLineResult::Started(Self::start_paragraph(line))
+                    match Self::check_fenced_code_block(indent, c, &mut iter) {
+                        Some(code) => NextLineResult::Started(code),
+                        None => NextLineResult::Started(Self::start_paragraph(line)),
                     },
-                Some(c @ ('*' | '_' | '-')) =>
-                    if Self::check_thematic_break(c, &mut iter) {
-                        NextLineResult::Finished(Block::HorizontalRule)
-                    } else {
-                        NextLineResult::Started(Self::start_paragraph(line))
-                    },
-                Some('#') =>
-                    if let Some(heading) = Self::check_atx_heading(&mut iter) {
-                        NextLineResult::Finished(heading)
-                    } else {
-                        NextLineResult::Started(Self::start_paragraph(line))
-                    },
+                Some(c @ ('*' | '_' | '-')) => match Self::check_thematic_break(c, &mut iter) {
+                    true => NextLineResult::Finished(Block::HorizontalRule),
+                    false => NextLineResult::Started(Self::start_paragraph(line)),
+                },
+                Some('#') => match Self::check_atx_heading(&mut iter) {
+                    Some(heading) => NextLineResult::Finished(heading),
+                    None => NextLineResult::Started(Self::start_paragraph(line)),
+                },
                 _ if !iter.all(char::is_whitespace) =>
                     NextLineResult::Started(Self::start_paragraph(line)),
                 _ => NextLineResult::Consumed,
@@ -120,62 +133,112 @@ impl CurrentBlock {
         }
     }
 
-    fn paragraph_next(lines: &mut Vec<String>, line: &str) -> NextLineResult {
-        let (indent, mut iter) = Self::skip_indent(line, 4);
+    fn paragraph_next(paragraph: &mut Paragraph, line: &str) -> NextLineResult {
+        let (indent, mut iter) = Self::skip_indent(line.trim_end(), 4);
         if indent >= 4 {
-            lines.push(line.to_owned());
+            paragraph.lines.push(line.to_owned());
+            paragraph.table_header_length = 0;
             NextLineResult::Consumed
         } else {
             match iter.next() {
-                Some('=') =>
-                    if Self::check_setext_heading(&mut iter) {
-                        NextLineResult::Finished(Self::setext_finish(1, lines))
-                    } else {
-                        lines.push(line.to_owned());
+                Some('=') => match Self::check_setext_heading(&mut iter) {
+                    true => NextLineResult::Finished(Self::setext_finish(1, &mut paragraph.lines)),
+                    false => {
+                        paragraph.lines.push(line.to_owned());
                         NextLineResult::Consumed
                     },
+                },
                 Some('-') => match Self::check_setext_heading_or_thematic_break(&mut iter) {
                     SetextHeadingResult::Line => {
-                        lines.push(line.to_owned());
+                        paragraph.lines.push(line.to_owned());
                         NextLineResult::Consumed
                     },
                     SetextHeadingResult::ThematicBreak => NextLineResult::FinishedTwo(
-                        Self::paragraph_finish(lines),
+                        Self::paragraph_finish(&mut paragraph.lines),
                         Block::HorizontalRule,
                     ),
                     SetextHeadingResult::Setext =>
-                        NextLineResult::Finished(Self::setext_finish(2, lines)),
+                        NextLineResult::Finished(Self::setext_finish(2, &mut paragraph.lines)),
                 },
-                Some(c @ ('*' | '_')) =>
-                    if Self::check_thematic_break(c, &mut iter) {
-                        NextLineResult::FinishedTwo(
-                            Self::paragraph_finish(lines),
-                            Block::HorizontalRule,
-                        )
-                    } else {
-                        lines.push(line.to_owned());
+                Some(c @ ('*' | '_')) => match Self::check_thematic_break(c, &mut iter) {
+                    true => NextLineResult::FinishedTwo(
+                        Self::paragraph_finish(&mut paragraph.lines),
+                        Block::HorizontalRule,
+                    ),
+                    false => {
+                        paragraph.lines.push(line.to_owned());
                         NextLineResult::Consumed
                     },
+                },
                 Some(c @ ('~' | '`')) =>
-                    if let Some(code) = Self::check_fenced_code_block(indent, c, &mut iter) {
-                        NextLineResult::FinishedAndStarted(Self::paragraph_finish(lines), code)
-                    } else {
-                        lines.push(line.to_owned());
+                    match Self::check_fenced_code_block(indent, c, &mut iter) {
+                        Some(code) => NextLineResult::FinishedAndStarted(
+                            Self::paragraph_finish(&mut paragraph.lines),
+                            code,
+                        ),
+                        None => {
+                            paragraph.lines.push(line.to_owned());
+                            NextLineResult::Consumed
+                        },
+                    },
+                Some('#') => match Self::check_atx_heading(&mut iter) {
+                    Some(heading) => NextLineResult::FinishedTwo(
+                        Self::paragraph_finish(&mut paragraph.lines),
+                        heading,
+                    ),
+                    None => {
+                        paragraph.lines.push(line.to_owned());
                         NextLineResult::Consumed
                     },
-                Some('#') =>
-                    if let Some(heading) = Self::check_atx_heading(&mut iter) {
-                        NextLineResult::FinishedTwo(Self::paragraph_finish(lines), heading)
-                    } else {
-                        lines.push(line.to_owned());
-                        NextLineResult::Consumed
-                    },
-                _ if !iter.all(char::is_whitespace) => {
-                    lines.push(line.to_owned());
-                    NextLineResult::Consumed
                 },
-                _ => NextLineResult::Finished(Self::paragraph_finish(lines)),
+                _ if !iter.all(char::is_whitespace) => {
+                    if paragraph.table_header_length != 0
+                        && let Some(alignments) =
+                            Self::check_table_delimiter(line, paragraph.table_header_length)
+                    {
+                        let table = CurrentBlock::Table(Table {
+                            size: paragraph.table_header_length,
+                            alignments,
+                            rows: vec![Self::split_rows(
+                                &paragraph.lines.pop().unwrap(),
+                                paragraph.table_header_length,
+                            )],
+                        });
+                        match paragraph.lines.is_empty() {
+                            true => NextLineResult::Started(table),
+                            false => NextLineResult::FinishedAndStarted(
+                                Self::paragraph_finish(&paragraph.lines),
+                                table,
+                            ),
+                        }
+                    } else {
+                        paragraph.lines.push(line.to_owned());
+                        paragraph.table_header_length = Self::check_table_header(line);
+                        NextLineResult::Consumed
+                    }
+                },
+                _ => NextLineResult::Finished(Self::paragraph_finish(&mut paragraph.lines)),
             }
+        }
+    }
+
+    fn split_rows(line: &str, columns: usize) -> Vec<String> {
+        let mut iter = line.trim().chars().peekable();
+        iter.next_if_eq(&'|');
+        let mut result = Vec::new();
+        let mut current = String::new();
+        loop {
+            match iter.next() {
+                Some('\\') => current.push(iter.next_if_eq(&'|').unwrap_or('\\')),
+                Some('|') | None => {
+                    result.push(current);
+                    if result.len() == columns {
+                        return result;
+                    }
+                    current = String::new();
+                },
+                Some(c) => current.push(c),
+            };
         }
     }
 
@@ -187,41 +250,36 @@ impl CurrentBlock {
         } else {
             match iter.next() {
                 Some(c @ ('~' | '`')) =>
-                    if let Some(code) = Self::check_fenced_code_block(indent, c, &mut iter) {
-                        NextLineResult::FinishedAndStarted(
+                    match Self::check_fenced_code_block(indent, c, &mut iter) {
+                        Some(code) => NextLineResult::FinishedAndStarted(
                             Self::indented_code_block_finish(lines),
                             code,
-                        )
-                    } else {
-                        NextLineResult::FinishedAndStarted(
+                        ),
+                        None => NextLineResult::FinishedAndStarted(
                             Self::indented_code_block_finish(lines),
                             Self::start_paragraph(line),
-                        )
+                        ),
                     },
-                Some(c @ ('*' | '_' | '-')) =>
-                    if Self::check_thematic_break(c, &mut iter) {
-                        NextLineResult::FinishedTwo(
-                            Self::indented_code_block_finish(lines),
-                            Block::HorizontalRule,
-                        )
-                    } else {
-                        NextLineResult::FinishedAndStarted(
-                            Self::indented_code_block_finish(lines),
-                            Self::start_paragraph(line),
-                        )
-                    },
-                Some('#') =>
-                    if let Some(heading) = Self::check_atx_heading(&mut iter) {
-                        NextLineResult::FinishedTwo(
-                            Self::indented_code_block_finish(lines),
-                            heading,
-                        )
-                    } else {
-                        NextLineResult::FinishedAndStarted(
-                            Self::indented_code_block_finish(lines),
-                            Self::start_paragraph(line),
-                        )
-                    },
+                Some(c @ ('*' | '_' | '-')) => match Self::check_thematic_break(c, &mut iter) {
+                    true => NextLineResult::FinishedTwo(
+                        Self::indented_code_block_finish(lines),
+                        Block::HorizontalRule,
+                    ),
+                    false => NextLineResult::FinishedAndStarted(
+                        Self::indented_code_block_finish(lines),
+                        Self::start_paragraph(line),
+                    ),
+                },
+                Some('#') => match Self::check_atx_heading(&mut iter) {
+                    Some(heading) => NextLineResult::FinishedTwo(
+                        Self::indented_code_block_finish(lines),
+                        heading,
+                    ),
+                    None => NextLineResult::FinishedAndStarted(
+                        Self::indented_code_block_finish(lines),
+                        Self::start_paragraph(line),
+                    ),
+                },
                 Some(_) => NextLineResult::FinishedAndStarted(
                     Self::indented_code_block_finish(lines),
                     Self::start_paragraph(line),
@@ -249,7 +307,9 @@ impl CurrentBlock {
                         Some(' ' | '\t') => continue,
                         Some(_) => break,
                         None =>
-                            return NextLineResult::Finished(Self::fenced_code_block_finish(code, false)),
+                            return NextLineResult::Finished(Self::fenced_code_block_finish(
+                                code, false,
+                            )),
                     }
                 }
             }
@@ -266,7 +326,112 @@ impl CurrentBlock {
         NextLineResult::Consumed
     }
 
+    fn table_next(table: &mut Table, line: &str) -> NextLineResult {
+        let (indent, mut iter) = Self::skip_indent(line, 4);
+        if indent >= 4 {
+            match iter.clone().all(char::is_whitespace) {
+                false => {
+                    table.rows.push(Self::split_rows(line, table.size));
+                    NextLineResult::Consumed
+                },
+                true => NextLineResult::Finished(Self::finish_table(table)),
+            }
+        } else {
+            match iter.next() {
+                Some(c @ ('~' | '`')) =>
+                    match Self::check_fenced_code_block(indent, c, &mut iter) {
+                        Some(code) =>
+                            NextLineResult::FinishedAndStarted(Self::finish_table(table), code),
+                        None => {
+                            table.rows.push(Self::split_rows(line, table.size));
+                            NextLineResult::Consumed
+                        },
+                    },
+                Some(c @ ('*' | '_' | '-')) => match Self::check_thematic_break(c, &mut iter) {
+                    true => NextLineResult::FinishedTwo(
+                        Self::finish_table(table),
+                        Block::HorizontalRule,
+                    ),
+                    false => {
+                        table.rows.push(Self::split_rows(line, table.size));
+                        NextLineResult::Consumed
+                    },
+                },
+                Some('#') => match Self::check_atx_heading(&mut iter) {
+                    Some(heading) =>
+                        NextLineResult::FinishedTwo(Self::finish_table(table), heading),
+                    None => {
+                        table.rows.push(Self::split_rows(line, table.size));
+                        NextLineResult::Consumed
+                    },
+                },
+                _ if !iter.all(char::is_whitespace) => {
+                    table.rows.push(Self::split_rows(line, table.size));
+                    NextLineResult::Consumed
+                },
+                _ => NextLineResult::Finished(Self::finish_table(table)),
+            }
+        }
+    }
+
     fn paragraph_finish(lines: &[String]) -> Block { Block::Para(InlineParser::parse_lines(lines)) }
+
+    fn make_cell(s: String) -> Cell {
+        let inline = InlineParser::parse_line(&s);
+        Cell(
+            attr_empty(),
+            Alignment::Default,
+            RowSpan(1),
+            ColSpan(1),
+            if inline.is_empty() {
+                Vec::new()
+            } else {
+                vec![Block::Plain(InlineParser::parse_line(&s))]
+            },
+        )
+    }
+
+    fn finish_table(table: &mut Table) -> Block {
+        let rows = std::mem::replace(&mut table.rows, Vec::new());
+        let mut iter = rows.into_iter();
+        Block::Table(
+            attr_empty(),
+            Caption(None, Vec::new()),
+            table.alignments.iter().map(|a| (a.clone(), ColWidth::ColWidthDefault)).collect(),
+            TableHead(attr_empty(), vec![Row(
+                attr_empty(),
+                iter.next().unwrap().into_iter().map(Self::make_cell).collect(),
+            )]),
+            vec![TableBody(
+                attr_empty(),
+                RowHeadColumns(0),
+                Vec::new(),
+                iter.map(|r| {
+                    let rest = table.size - r.len();
+                    Row(
+                        attr_empty(),
+                        r.into_iter()
+                            .map(Self::make_cell)
+                            .chain(
+                                iter::repeat_with(|| {
+                                    Cell(
+                                        attr_empty(),
+                                        Alignment::Default,
+                                        RowSpan(1),
+                                        ColSpan(1),
+                                        Vec::new(),
+                                    )
+                                })
+                                .take(rest),
+                            )
+                            .collect(),
+                    )
+                })
+                .collect(),
+            )],
+            TableFoot(attr_empty(), Vec::new()),
+        )
+    }
 
     fn setext_finish(level: i32, lines: &[String]) -> Block {
         Block::Header(level, attr_empty(), InlineParser::parse_lines(lines))
@@ -317,7 +482,7 @@ impl CurrentBlock {
         let mut count = 1;
         loop {
             match rest.next() {
-                Some('#') if count <= 5 => count += 1,
+                Some('#') if count < 6 => count += 1,
                 Some(' ') => break,
                 None => return Some(Block::Header(count, attr_empty(), Vec::new())),
                 _ => return None,
@@ -371,11 +536,8 @@ impl CurrentBlock {
         indent: usize, first: char, rest: &mut Peekable<Chars>,
     ) -> Option<CurrentBlock> {
         let mut count = 1;
-        while let Some(c) = rest.peek()
-            && *c == first
-        {
+        while rest.next_if_eq(&first).is_some() {
             count += 1;
-            rest.next();
         }
         if count < 3 {
             return None;
@@ -397,10 +559,79 @@ impl CurrentBlock {
         }))
     }
 
-    fn start_paragraph(line: &str) -> CurrentBlock { Self::Paragraph(vec![line.to_owned()]) }
+    fn start_paragraph(line: &str) -> CurrentBlock {
+        CurrentBlock::Paragraph(Paragraph {
+            lines: vec![line.to_owned()],
+            table_header_length: Self::check_table_header(line),
+        })
+    }
 
     fn start_indented_code_block(rest: &mut Peekable<Chars>) -> CurrentBlock {
         Self::IndentedCodeBlock(vec![rest.collect()])
+    }
+
+    pub fn check_table_header(line: &str) -> usize {
+        let mut iter = line.trim().chars();
+        let (mut count, mut escape, mut first) = match iter.next() {
+            Some('\\') => (0, true, false),
+            Some('|') => (1, false, true),
+            _ => (0, false, false),
+        };
+        let mut previous = false;
+        for c in iter {
+            if c == '\\' && !escape {
+                escape = true;
+                previous = false;
+            } else if c == '|' && !escape {
+                count += 1;
+                previous = true;
+                escape = false;
+            } else {
+                escape = false;
+                previous = false;
+            }
+        }
+        if count == 0 {
+            0
+        } else {
+            count + 1 - previous as usize - first as usize
+        }
+    }
+
+    pub fn check_table_delimiter(line: &str, size: usize) -> Option<Vec<Alignment>> {
+        let mut iter = line.trim().chars().peekable();
+        iter.next_if_eq(&'|');
+        let mut result = Vec::new();
+        for i in 0..size {
+            loop {
+                if iter.next_if(|c| matches!(c, ' ' | '\t')).is_none() {
+                    break;
+                }
+            }
+            let left = iter.next_if_eq(&':').is_some();
+            iter.next_if_eq(&'-')?;
+            loop {
+                if iter.next_if_eq(&'-').is_none() {
+                    break;
+                }
+            }
+            let right = iter.next_if_eq(&':').is_some();
+            loop {
+                if iter.next_if(|c| matches!(c, ' ' | '\t')).is_none() {
+                    break;
+                }
+            }
+            if iter.next_if_eq(&'|').is_none() && i != size - 1 {
+                return None;
+            }
+            result.push(match (left, right) {
+                (false, false) => Alignment::Default,
+                (false, true) => Alignment::Right,
+                (true, false) => Alignment::Left,
+                (true, true) => Alignment::Center,
+            });
+        }
+        iter.next().is_none().then_some(result)
     }
 
     fn skip_indent(line: &str, limit: usize) -> (usize, Peekable<Chars>) {
@@ -547,6 +778,23 @@ mod tests {
                 "````;\n````", "``` aa ```\nfoo", "~~~ aa ``` ~~~\nfoo\n~~~", "```\n``` aaa\n```",
             ],
             89,
+        )
+    }
+
+    #[test]
+    fn test_table() {
+        test(
+            vec![
+                "| foo | bar |\n| --- | --- |\n| baz | bim |",
+                "| abc | defghi |\n:-: | -----------:\nbar | baz",
+                "| f\\|oo  |\n| ------ |\n| b `\\|` az |\n| b **\\|** im |",
+                "| abc | def |\n| --- | --- |\n| bar | baz |\n> bar",
+                "| abc | def |\n| --- | --- |\n| bar | baz |\nbar\n\nbar",
+                "| abc | def |\n| --- |\n| bar |",
+                "| abc | def |\n| --- | --- |\n| bar |\n| bar | baz | boo |",
+                "| abc | def |\n| --- | --- |",
+            ],
+            198,
         )
     }
 }

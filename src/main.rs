@@ -1,9 +1,5 @@
+use md_converter::md_reader::{CurrentBlock, MdReader};
+
 fn main() {
-    let a = "1234567";
-    let mut iter = a.chars();
-    for _ in 0..3 {
-        iter.next();
-    }
-    let b: String = iter.collect();
-    println!("{b}");
+    MdReader::parse( "    # foo");
 }
