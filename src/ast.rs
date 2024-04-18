@@ -1,7 +1,10 @@
 use std::collections::HashMap;
+use std::iter;
 
 use derivative::Derivative;
 use serde::{Deserialize, Serialize};
+
+use crate::inline_parser::InlineParser;
 
 type Bool = bool;
 type Int = i32;
@@ -36,7 +39,7 @@ pub enum Block {
     Plain(Vec<Inline>),
     Para(Vec<Inline>),
     LineBlock(Vec<Vec<Inline>>),
-    CodeBlock(/*#[derivative(PartialEq = "ignore")]*/ Attr, Text),
+    CodeBlock(/* #[derivative(PartialEq = "ignore")] */ Attr, Text),
     RawBlock(Format, Text),
     BlockQuote(Vec<Block>),
     OrderedList(ListAttributes, Vec<Vec<Block>>),
@@ -47,6 +50,21 @@ pub enum Block {
     Table(Attr, Caption, Vec<ColSpec>, TableHead, Vec<TableBody>, TableFoot),
     Figure(Attr, Caption, Vec<Block>),
     Div(Attr, Vec<Block>),
+}
+
+impl Block {
+    pub fn new_header(level: usize, inlines: Vec<Inline>) -> Self {
+        Self::Header(level as Int, attr_empty(), inlines)
+    }
+    
+    pub fn new_table(rows: Vec<Vec<String>>, alignments: Vec<Alignment>, size: usize) -> Self {
+        let mut iter = rows.into_iter();
+        Self::Table(attr_empty(), Caption::empty(), alignments.into_iter().map(|a| (a, ColWidth::ColWidthDefault)).collect(),
+            TableHead::new(iter.next().unwrap(), size),
+            vec![TableBody::new(iter, size)],
+            TableFoot::empty()
+        )
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
@@ -86,16 +104,41 @@ type ListAttributes = (Int, ListNumberStyle, ListNumberDelim);
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Caption(pub Option<ShortCaption>, pub Vec<Block>);
 
+impl Caption {
+    pub fn empty() -> Self {
+        Self(None, Vec::new())
+    }
+}
+
 type ColSpec = (Alignment, ColWidth);
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct TableHead(pub Attr, pub Vec<Row>);
 
+impl TableHead {
+    pub fn new(row: Vec<String>, size: usize) -> Self {
+        Self(attr_empty(), vec![Row::new(row, size)])
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct TableBody(pub Attr, pub RowHeadColumns, pub Vec<Row>, pub Vec<Row>);
 
+impl TableBody {
+    pub fn new<I>(rows: I, size: usize) -> Self
+    where I: Iterator<Item = Vec<String>> {
+        Self(attr_empty(), RowHeadColumns(0), Vec::new(), rows.map(|r| Row::new(r, size)).collect())
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct TableFoot(pub Attr, pub Vec<Row>);
+
+impl TableFoot {
+    pub fn empty() -> Self {
+        Self(attr_empty(), Vec::new())
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(tag = "t")]
@@ -176,6 +219,19 @@ pub enum ColWidth {
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Row(pub Attr, pub Vec<Cell>);
 
+impl Row {
+    pub fn new(row: Vec<String>, size: usize) -> Self {
+        let rest = size - row.len();
+        return Self(
+            attr_empty(),
+            row.into_iter()
+                .map(Cell::new)
+                .chain(iter::repeat_with(Cell::empty).take(rest))
+                .collect(),
+        );
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct RowHeadColumns(pub Int);
 
@@ -189,6 +245,23 @@ pub enum CitationMode {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Cell(pub Attr, pub Alignment, pub RowSpan, pub ColSpan, pub Vec<Block>);
+
+impl Cell {
+    pub fn new(content: String) -> Self {
+        let inlines = InlineParser::parse_line(&content);
+        Cell(
+            attr_empty(),
+            Alignment::Default,
+            RowSpan(1),
+            ColSpan(1),
+            if inlines.is_empty() { Vec::new() } else { vec![Block::Plain(inlines)] },
+        )
+    }
+
+    pub fn empty() -> Self {
+        Self(attr_empty(), Alignment::Default, RowSpan(1), ColSpan(1), Vec::new())
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct RowSpan(pub Int);

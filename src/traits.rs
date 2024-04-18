@@ -11,4 +11,3 @@ pub trait AstWriter {
 
     fn write(&mut self, ast: Pandoc) -> Result<String, Self::WriteError>;
 }
-
