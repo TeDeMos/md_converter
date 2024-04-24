@@ -1,11 +1,10 @@
 use std::iter::Peekable;
 use std::str::Chars;
 
-use super::atx_heading::AtxHeading;
-use super::fenced_code_block::FencedCodeBlock;
-use super::table::Table;
-use super::thematic_break::ThematicBreak;
-use super::{skip_indent, LineResult, TempBlock};
+use super::{
+    skip_indent, AtxHeading, BlockQuote, FencedCodeBlock, LineResult, Table, TempBlock,
+    ThematicBreak,
+};
 use crate::ast::{Alignment, Block};
 use crate::inline_parser::InlineParser;
 
@@ -26,19 +25,32 @@ impl Paragraph {
     pub fn next(&mut self, line: &str) -> LineResult {
         let (indent, mut iter) = skip_indent(line.trim_end(), 4);
         if indent >= 4 {
-            self.lines.push(line.to_owned());
-            self.table_header_length = 0;
-            LineResult::None
+            self.push(line, false)
         } else {
             match iter.next() {
                 Some('=') => self.check_equals_setext(line, &mut iter),
                 Some('-') => self.check_dash_setext_or_break(line, &mut iter),
-                Some(c @ ('*' | '_')) => self.check_non_dash_break(c, line, &mut iter),
-                Some(c @ ('~' | '`')) => self.check_code_block(indent, c, line, &mut iter),
-                Some('#') => self.check_atx_heading(line, &mut iter),
-                _ if !iter.all(char::is_whitespace) => self.push(line),
+                Some(c @ ('*' | '_')) => self.check_break(c, line, &mut iter, false),
+                Some(c @ ('~' | '`')) => self.check_code_block(indent, c, line, &mut iter, false),
+                Some('#') => self.check_atx_heading(line, &mut iter, false),
+                Some('>') => LineResult::DoneSelfAndNew(TempBlock::BlockQuote(BlockQuote::new(
+                    indent, line, &mut iter,
+                ))),
+                _ if !iter.all(char::is_whitespace) => self.push(line, false),
                 _ => LineResult::DoneSelf,
             }
+        }
+    }
+
+    pub fn next_no_split(
+        &mut self, indent: usize, first: Option<char>, line: &str, iter: &mut Peekable<Chars>,
+    ) -> LineResult {
+        match first {
+            Some(c @ ('-' | '*' | '_')) => self.check_break(c, line, iter, true),
+            Some(c @ ('~' | '`')) => self.check_code_block(indent, c, line, iter, true),
+            Some('#') => self.check_atx_heading(line, iter, true),
+            _ if !iter.all(char::is_whitespace) => self.push(line, true),
+            _ => LineResult::DoneSelf,
         }
     }
 
@@ -57,7 +69,7 @@ impl Paragraph {
             match rest.next() {
                 Some('=') if !whitespace => continue,
                 Some(' ' | '\t') => whitespace = true,
-                Some(_) => return self.push(line),
+                Some(_) => return self.push(line, false),
                 None => {
                     self.setext = 1;
                     return LineResult::DoneSelf;
@@ -79,7 +91,7 @@ impl Paragraph {
                     }
                 },
                 Some(' ' | '\t') => whitespace = true,
-                Some(_) => return self.push(line),
+                Some(_) => return self.push(line, false),
                 None =>
                     return if thematic && count >= 3 {
                         LineResult::DoneSelfAndOther(TempBlock::ThematicBreak(ThematicBreak))
@@ -91,26 +103,29 @@ impl Paragraph {
         }
     }
 
-    fn check_non_dash_break(
-        &mut self, first: char, line: &str, rest: &mut Peekable<Chars>,
+    fn check_break(
+        &mut self, first: char, line: &str, rest: &mut Peekable<Chars>, non_split: bool,
     ) -> LineResult {
         ThematicBreak::check(first, rest)
             .map(|t| LineResult::DoneSelfAndOther(TempBlock::ThematicBreak(t)))
-            .unwrap_or_else(|| self.push(line))
+            .unwrap_or_else(|| self.push(line, non_split))
     }
 
     fn check_code_block(
         &mut self, indent: usize, first: char, line: &str, rest: &mut Peekable<Chars>,
+        non_split: bool,
     ) -> LineResult {
         FencedCodeBlock::check(indent, first, rest)
             .map(|f| LineResult::DoneSelfAndNew(TempBlock::FencedCodeBlock(f)))
-            .unwrap_or_else(|| self.push(line))
+            .unwrap_or_else(|| self.push(line, non_split))
     }
 
-    fn check_atx_heading(&mut self, line: &str, rest: &mut Peekable<Chars>) -> LineResult {
+    fn check_atx_heading(
+        &mut self, line: &str, rest: &mut Peekable<Chars>, non_split: bool,
+    ) -> LineResult {
         AtxHeading::check(rest)
             .map(|a| LineResult::DoneSelfAndOther(TempBlock::AtxHeading(a)))
-            .unwrap_or_else(|| self.push(line))
+            .unwrap_or_else(|| self.push(line, non_split))
     }
 
     fn check_table_header(&mut self, line: &str) {
@@ -168,10 +183,12 @@ impl Paragraph {
         iter.next().is_none().then_some(result)
     }
 
-    fn push(&mut self, line: &str) -> LineResult {
-        if self.table_header_length != 0
+    pub fn push(&mut self, line: &str, non_split: bool) -> LineResult {
+        if !non_split
+            && self.table_header_length != 0
             && let Some(alignments) = self.check_table_delimiter(line)
         {
+            // Safety: paragraph is initialized with one item in vector, pop can't return None
             let table = TempBlock::Table(Table::new(self.lines.pop().unwrap(), alignments));
             match self.lines.is_empty() {
                 true => LineResult::New(table),

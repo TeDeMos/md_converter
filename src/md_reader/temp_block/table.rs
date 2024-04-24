@@ -1,12 +1,10 @@
 use std::iter::Peekable;
 use std::str::Chars;
 
-use super::atx_heading::AtxHeading;
-use super::fenced_code_block::FencedCodeBlock;
-use super::thematic_break::ThematicBreak;
-use super::{skip_indent, LineResult};
+use super::{
+    skip_indent, AtxHeading, BlockQuote, FencedCodeBlock, LineResult, TempBlock, ThematicBreak,
+};
 use crate::ast::{Alignment, Block};
-use crate::md_reader::temp_block::TempBlock;
 
 pub struct Table {
     size: usize,
@@ -33,6 +31,9 @@ impl Table {
                 Some(c @ ('~' | '`')) => self.check_code_block(indent, c, line, &mut iter),
                 Some(c @ ('*' | '_' | '-')) => self.check_break(c, line, &mut iter),
                 Some('#') => self.check_atx_heading(line, &mut iter),
+                Some('>') => LineResult::DoneSelfAndNew(TempBlock::BlockQuote(BlockQuote::new(
+                    indent, line, &mut iter,
+                ))),
                 _ if !iter.all(char::is_whitespace) => self.push(line),
                 _ => LineResult::DoneSelf,
             }

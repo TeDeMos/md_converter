@@ -56,13 +56,16 @@ impl Block {
     pub fn new_header(level: usize, inlines: Vec<Inline>) -> Self {
         Self::Header(level as Int, attr_empty(), inlines)
     }
-    
+
     pub fn new_table(rows: Vec<Vec<String>>, alignments: Vec<Alignment>, size: usize) -> Self {
         let mut iter = rows.into_iter();
-        Self::Table(attr_empty(), Caption::empty(), alignments.into_iter().map(|a| (a, ColWidth::ColWidthDefault)).collect(),
+        Self::Table(
+            attr_empty(),
+            Caption::empty(),
+            alignments.into_iter().map(|a| (a, ColWidth::ColWidthDefault)).collect(),
             TableHead::new(iter.next().unwrap(), size),
             vec![TableBody::new(iter, size)],
-            TableFoot::empty()
+            TableFoot::empty(),
         )
     }
 }
@@ -105,9 +108,7 @@ type ListAttributes = (Int, ListNumberStyle, ListNumberDelim);
 pub struct Caption(pub Option<ShortCaption>, pub Vec<Block>);
 
 impl Caption {
-    pub fn empty() -> Self {
-        Self(None, Vec::new())
-    }
+    pub fn empty() -> Self { Self(None, Vec::new()) }
 }
 
 type ColSpec = (Alignment, ColWidth);
@@ -135,9 +136,7 @@ impl TableBody {
 pub struct TableFoot(pub Attr, pub Vec<Row>);
 
 impl TableFoot {
-    pub fn empty() -> Self {
-        Self(attr_empty(), Vec::new())
-    }
+    pub fn empty() -> Self { Self(attr_empty(), Vec::new()) }
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]

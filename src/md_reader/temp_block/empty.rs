@@ -1,12 +1,10 @@
 use std::iter::Peekable;
 use std::str::Chars;
 
-use super::{LineResult, skip_indent, TempBlock};
-use super::paragraph::Paragraph;
-use super::atx_heading::AtxHeading;
-use super::thematic_break::ThematicBreak;
-use super::indented_code_block::IndentedCodeBlock;
-use super::fenced_code_block::FencedCodeBlock;
+use super::{
+    skip_indent, AtxHeading, BlockQuote, FencedCodeBlock, IndentedCodeBlock, LineResult, Paragraph,
+    TempBlock, ThematicBreak,
+};
 
 pub struct Empty;
 
@@ -24,6 +22,8 @@ impl Empty {
                 Some(c @ ('~' | '`')) => Self::check_code_block(indent, c, line, &mut iter),
                 Some(c @ ('*' | '_' | '-')) => Self::check_thematic_break(c, line, &mut iter),
                 Some('#') => Self::check_atx_heading(line, &mut iter),
+                Some('>') =>
+                    LineResult::New(TempBlock::BlockQuote(BlockQuote::new(indent, line, &mut iter))),
                 _ if !iter.all(char::is_whitespace) =>
                     LineResult::New(TempBlock::Paragraph(Paragraph::new(line))),
                 _ => LineResult::None,

@@ -10,7 +10,7 @@ pub struct FencedCodeBlock {
     fence_char: char,
     info: String,
     content: String,
-    closed: bool,
+    // closed: bool,
 }
 
 impl FencedCodeBlock {
@@ -36,7 +36,7 @@ impl FencedCodeBlock {
             fence_size: count,
             info,
             content: String::new(),
-            closed: false,
+            // closed: false,
         })
     }
 
@@ -55,7 +55,7 @@ impl FencedCodeBlock {
                         Some(' ' | '\t') => continue,
                         Some(_) => break,
                         None => {
-                            self.closed = true;
+                            // self.closed = true;
                             return LineResult::DoneSelf;
                         },
                     }
@@ -75,9 +75,9 @@ impl FencedCodeBlock {
     }
 
     pub fn finish(mut self) -> Block {
-        if self.closed {
+        // if self.closed {
             self.content.pop();
-        }
+        // }
         if let Some(n) = self.info.find(' ') {
             self.info.truncate(n)
         }

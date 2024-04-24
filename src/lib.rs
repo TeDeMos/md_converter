@@ -1,4 +1,4 @@
-#![feature(let_chains)]
+#![feature(let_chains, unwrap_infallible, never_type)]
 #![warn(clippy::pedantic, clippy::nursery)]
 
 pub mod ast;

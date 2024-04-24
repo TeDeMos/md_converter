@@ -3,13 +3,16 @@ use std::iter;
 use temp_block::TempBlock;
 
 use crate::ast::Pandoc;
+use crate::traits::AstReader;
 
 mod temp_block;
 
 pub struct MdReader;
 
-impl MdReader {
-    pub fn parse(source: &str) -> Pandoc {
+impl AstReader for MdReader {
+    type ReadError = !;
+
+    fn read(source: &str) -> Result<Pandoc, Self::ReadError> {
         let mut current = TempBlock::default();
         let mut finished: Vec<TempBlock> = Vec::new();
         for line in source.lines() {
@@ -17,7 +20,7 @@ impl MdReader {
         }
         let result =
             finished.into_iter().chain(iter::once(current)).filter_map(TempBlock::finish).collect();
-        Pandoc { blocks: result, ..Default::default() }
+        Ok(Pandoc { blocks: result, ..Default::default() })
     }
 }
 
@@ -51,7 +54,7 @@ mod tests {
                 )
                 .unwrap()
             };
-            let result = MdReader::parse(e);
+            let result = MdReader::read(e).into_ok();
             if result.blocks == expected.blocks {
                 println!("\x1b[32mExample {} : success", number);
                 println!("Input:\n{}", e);
@@ -165,6 +168,22 @@ mod tests {
                 "| abc | def |\n| --- | --- |",
             ],
             198,
+        )
+    }
+
+    #[test]
+    fn test_quote_block() {
+        test(
+            vec![
+                "> # Foo\n> bar\n> baz", "># Foo\n>bar\n> baz", "   > # Foo\n   > bar\n > baz",
+                "    > # Foo\n    > bar\n    > baz", "> # Foo\n> bar\nbaz", "> bar\nbaz\n> foo",
+                "> foo\n---", "> - foo\n- bar", ">     foo\n    bar", "> ```\nfoo\n```",
+                "> foo\n    - bar", ">", ">\n>  \n> ", ">\n> foo\n>  ", "> foo\n\n> bar",
+                "> foo\n> bar", "> foo\n>\n> bar", "foo\n> bar", "> aaa\n***\n> bbb", "> bar\nbaz",
+                "> bar\n\nbaz", "> bar\n>\nbaz", "> > > foo\nbar", ">>> foo\n> bar\n>>baz",
+                ">     code\n\n>    not code",
+            ],
+            206,
         )
     }
 }

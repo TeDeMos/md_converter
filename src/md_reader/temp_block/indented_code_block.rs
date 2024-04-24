@@ -1,12 +1,11 @@
 use std::iter::Peekable;
 use std::str::Chars;
 
-use super::paragraph::Paragraph;
-use super::{skip_indent, LineResult, TempBlock};
+use super::{
+    skip_indent, AtxHeading, BlockQuote, FencedCodeBlock, LineResult, Paragraph, TempBlock,
+    ThematicBreak,
+};
 use crate::ast::{attr_empty, Block};
-use super::thematic_break::ThematicBreak;
-use super::atx_heading::AtxHeading;
-use super::fenced_code_block::FencedCodeBlock;
 
 pub struct IndentedCodeBlock(Vec<String>);
 
@@ -23,6 +22,9 @@ impl IndentedCodeBlock {
                 Some(c @ ('~' | '`')) => self.check_fenced_code_block(indent, c, line, &mut iter),
                 Some(c @ ('*' | '_' | '-')) => self.check_thematic_break(c, line, &mut iter),
                 Some('#') => self.check_atx_heading(line, &mut iter),
+                Some('>') => LineResult::DoneSelfAndNew(TempBlock::BlockQuote(BlockQuote::new(
+                    indent, line, &mut iter,
+                ))),
                 Some(_) => LineResult::DoneSelfAndNew(TempBlock::Paragraph(Paragraph::new(line))),
                 _ => {
                     self.0.push(iter.collect());

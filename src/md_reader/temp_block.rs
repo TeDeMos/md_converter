@@ -8,6 +8,7 @@ use indented_code_block::IndentedCodeBlock;
 use paragraph::Paragraph;
 use table::Table;
 use thematic_break::ThematicBreak;
+use block_quote::BlockQuote;
 
 use crate::ast::Block;
 
@@ -18,6 +19,7 @@ mod indented_code_block;
 mod paragraph;
 mod table;
 mod thematic_break;
+mod block_quote;
 
 pub enum TempBlock {
     Empty(Empty),
@@ -27,6 +29,7 @@ pub enum TempBlock {
     IndentedCodeBlock(IndentedCodeBlock),
     FencedCodeBlock(FencedCodeBlock),
     Table(Table),
+    BlockQuote(BlockQuote)
 }
 
 impl TempBlock {
@@ -37,8 +40,14 @@ impl TempBlock {
             TempBlock::IndentedCodeBlock(i) => i.next(line),
             TempBlock::FencedCodeBlock(f) => f.next(line),
             TempBlock::Table(t) => t.next(line),
+            TempBlock::BlockQuote(b) => b.next(line),
+            //Safety: atx headings and thematic breaks are always passed as finished
             TempBlock::AtxHeading(_) | TempBlock::ThematicBreak(_) => unreachable!(),
         };
+        self.apply_result(result, finished);
+    }
+    
+    pub fn apply_result(&mut self, result: LineResult, finished: &mut Vec<Self>) {
         match result {
             LineResult::None => {},
             LineResult::New(new) => *self = new,
@@ -61,6 +70,7 @@ impl TempBlock {
             TempBlock::IndentedCodeBlock(i) => Some(i.finish()),
             TempBlock::FencedCodeBlock(c) => Some(c.finish()),
             TempBlock::Table(table) => Some(table.finish()),
+            TempBlock::BlockQuote(b) => Some(b.finish()),
         }
     }
 
