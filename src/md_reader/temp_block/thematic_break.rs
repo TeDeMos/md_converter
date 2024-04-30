@@ -3,6 +3,7 @@ use std::str::Chars;
 
 use crate::ast::Block;
 
+#[derive(Debug)]
 pub struct ThematicBreak;
 
 impl ThematicBreak {

@@ -10,3 +10,5 @@ serde_json = "1.0.114"
 serde = { version = "1.0.197", features = ["derive"] }
 derivative = "2.2.0"
 itertools = "0.12.1"
+derive_more = "0.99.17"
+lazy_static = "1.4.0"

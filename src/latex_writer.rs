@@ -6,7 +6,5 @@ pub struct LatexWriter;
 impl AstWriter for LatexWriter {
     type WriteError = ();
 
-    fn write(&mut self, _ast: Pandoc) -> Result<String, Self::WriteError> {
-        todo!()
-    }
+    fn write(&mut self, _ast: Pandoc) -> Result<String, Self::WriteError> { todo!() }
 }

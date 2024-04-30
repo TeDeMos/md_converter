@@ -97,12 +97,20 @@ pub enum Inline {
 
 type Attr = (Text, Vec<Text>, Vec<(Text, Text)>);
 
-pub fn attr_empty() -> Attr { ("".into(), vec![], vec![]) }
+pub fn attr_empty() -> Attr { (String::new(), vec![], vec![]) }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Format(pub Text);
 
 type ListAttributes = (Int, ListNumberStyle, ListNumberDelim);
+
+pub fn new_list_attributes(starting: i32, closing: char) -> ListAttributes {
+    (starting as Int, ListNumberStyle::Decimal, match closing {
+        '.' => ListNumberDelim::Period,
+        ')' => ListNumberDelim::OneParen,
+        _ => unreachable!(),
+    })
+}
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct Caption(pub Option<ShortCaption>, pub Vec<Block>);
@@ -221,13 +229,13 @@ pub struct Row(pub Attr, pub Vec<Cell>);
 impl Row {
     pub fn new(row: Vec<String>, size: usize) -> Self {
         let rest = size - row.len();
-        return Self(
+        Self(
             attr_empty(),
             row.into_iter()
                 .map(Cell::new)
                 .chain(iter::repeat_with(Cell::empty).take(rest))
                 .collect(),
-        );
+        )
     }
 }
 
@@ -247,8 +255,8 @@ pub struct Cell(pub Attr, pub Alignment, pub RowSpan, pub ColSpan, pub Vec<Block
 
 impl Cell {
     pub fn new(content: String) -> Self {
-        let inlines = InlineParser::parse_line(&content);
-        Cell(
+        let inlines = InlineParser::parse_line(content);
+        Self(
             attr_empty(),
             Alignment::Default,
             RowSpan(1),

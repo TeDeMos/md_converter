@@ -1,9 +1,9 @@
-#![feature(let_chains, unwrap_infallible, never_type)]
+#![feature(let_chains, unwrap_infallible, never_type, if_let_guard)]
 #![warn(clippy::pedantic, clippy::nursery)]
 
 pub mod ast;
-pub mod traits;
-pub mod md_reader;
 pub mod inline_parser;
-pub mod typst_writer;
 pub mod latex_writer;
+pub mod md_reader;
+pub mod traits;
+pub mod typst_writer;

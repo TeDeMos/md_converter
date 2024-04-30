@@ -3,11 +3,12 @@ use std::iter::Peekable;
 use std::str::Chars;
 
 use super::{
-    skip_indent, AtxHeading, FencedCodeBlock, IndentedCodeBlock, LineResult, Paragraph, TempBlock,
-    ThematicBreak,
+    skip_indent, AtxHeading, FencedCodeBlock, IndentedCodeBlock, LineResult, List, ListResult,
+    Paragraph, TempBlock, ThematicBreak, ToLineResult,
 };
 use crate::ast::Block;
 
+#[derive(Debug)]
 pub struct BlockQuote {
     current: Box<TempBlock>,
     finished: Vec<TempBlock>,
@@ -29,37 +30,58 @@ impl BlockQuote {
         if indent >= 4 {
             if iter.clone().all(char::is_whitespace) {
                 LineResult::DoneSelf
-            } else if let TempBlock::Paragraph(p) = self.current.as_mut() {
-                let result = p.push(line, true);
-                self.current.apply_result(result, &mut self.finished);
-                LineResult::None
             } else {
-                LineResult::DoneSelfAndNew(TempBlock::IndentedCodeBlock(IndentedCodeBlock::new(
-                    &mut iter,
-                )))
+                match self.over_indented_continuation(line) {
+                    true => LineResult::None,
+                    false => IndentedCodeBlock::new(&mut iter).done_self_and_new(),
+                }
             }
         } else {
-            match (iter.next(), self.current.as_mut()) {
-                (Some('>'), c) => {
+            match iter.next() {
+                Some('>') => {
                     let line = if iter.peek() == Some(&' ') {
                         &line[indent + 2..]
                     } else {
                         &line[indent + 1..]
                     };
-                    c.next(line, &mut self.finished);
+                    self.current.next(line, &mut self.finished);
                     LineResult::None
                 },
-                (f, TempBlock::Paragraph(p)) => p.next_no_split(indent, f, line, &mut iter),
-                (_, TempBlock::BlockQuote(b)) => b.next(line),
-                (Some(c @ ('~' | '`')), _) => self.check_code_block(indent, c, line, &mut iter),
-                (Some(c @ ('*' | '_' | '-')), _) => self.check_thematic_break(c, line, &mut iter),
-                (Some('#'), _) => self.check_atx_heading(line, &mut iter),
-                _ if !iter.all(char::is_whitespace) =>
-                    LineResult::DoneSelfAndNew(TempBlock::Paragraph(Paragraph::new(line))),
+                f if let Some(r) = self.continuation(indent, f, line, &mut iter.clone()) => r,
+                Some(c @ ('~' | '`')) => match FencedCodeBlock::check(indent, c, &mut iter) {
+                    Some(b) => b.done_self_and_new(),
+                    None => Paragraph::new(line).done_self_and_new(),
+                },
+                Some(c @ ('*' | '-')) => match List::check_other(c, indent, line, &mut iter) {
+                    ListResult::List(b) => b.done_self_and_new(),
+                    ListResult::Break(b) => b.done_self_and_other(),
+                    ListResult::None => Paragraph::new(line).done_self_and_new(),
+                },
+                Some('_') => match ThematicBreak::check('_', &mut iter) {
+                    Some(b) => b.done_self_and_other(),
+                    None => Paragraph::new(line).done_self_and_new(),
+                },
+                Some('+') => match List::check_plus(indent, line, &mut iter) {
+                    Some(l) => l.done_self_and_new(),
+                    None => Paragraph::new(line).done_self_and_new(),
+                },
+                Some('#') => match AtxHeading::check(&mut iter) {
+                    Some(b) => b.done_self_and_other(),
+                    None => Paragraph::new(line).done_self_and_new(),
+                },
+                Some(c @ '0'..='9') => match List::check_number(c, indent, line, &mut iter) {
+                    Some(b) => b.done_self_and_new(),
+                    None => Paragraph::new(line).done_self_and_new(),
+                },
+                Some(_) => LineResult::DoneSelfAndNew(TempBlock::Paragraph(Paragraph::new(line))),
+                // _ if !iter.all(char::is_whitespace) =>
+                //     LineResult::DoneSelfAndNew(TempBlock::Paragraph(Paragraph::new(line))),
                 _ => LineResult::DoneSelf,
             }
         }
     }
+
+    pub fn next_blank(&mut self) -> LineResult { LineResult::DoneSelf }
 
     pub fn finish(self) -> Block {
         Block::BlockQuote(
@@ -71,31 +93,13 @@ impl BlockQuote {
         )
     }
 
-    fn check_code_block(
-        &mut self, indent: usize, first: char, line: &str, rest: &mut Peekable<Chars>,
-    ) -> LineResult {
-        LineResult::DoneSelfAndNew(
-            FencedCodeBlock::check(indent, first, rest)
-                .map(TempBlock::FencedCodeBlock)
-                .unwrap_or_else(|| TempBlock::Paragraph(Paragraph::new(line))),
-        )
+    pub fn continuation(
+        &mut self, indent: usize, first: Option<char>, line: &str, rest: &mut Peekable<Chars>,
+    ) -> Option<LineResult> {
+        self.current.continuation(indent, first, line, rest)
     }
 
-    fn check_thematic_break(
-        &mut self, first: char, line: &str, rest: &mut Peekable<Chars>,
-    ) -> LineResult {
-        ThematicBreak::check(first, rest)
-            .map(|t| LineResult::DoneSelfAndOther(TempBlock::ThematicBreak(t)))
-            .unwrap_or_else(|| {
-                LineResult::DoneSelfAndNew(TempBlock::Paragraph(Paragraph::new(line)))
-            })
-    }
-
-    fn check_atx_heading(&mut self, line: &str, rest: &mut Peekable<Chars>) -> LineResult {
-        AtxHeading::check(rest)
-            .map(|a| LineResult::DoneSelfAndOther(TempBlock::AtxHeading(a)))
-            .unwrap_or_else(|| {
-                LineResult::DoneSelfAndNew(TempBlock::Paragraph(Paragraph::new(line)))
-            })
+    pub fn over_indented_continuation(&mut self, line: &str) -> bool {
+        self.current.over_indented_continuation(line)
     }
 }

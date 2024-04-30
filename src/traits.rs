@@ -2,7 +2,7 @@ use crate::ast::Pandoc;
 
 pub trait AstReader {
     type ReadError;
-    
+
     fn read(str: &str) -> Result<Pandoc, Self::ReadError>;
 }
 

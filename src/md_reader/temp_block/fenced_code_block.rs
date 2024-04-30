@@ -4,13 +4,13 @@ use std::str::Chars;
 use super::{skip_indent, LineResult};
 use crate::ast::Block;
 
+#[derive(Debug)]
 pub struct FencedCodeBlock {
     indent: usize,
     fence_size: usize,
     fence_char: char,
     info: String,
     content: String,
-    // closed: bool,
 }
 
 impl FencedCodeBlock {
@@ -30,13 +30,12 @@ impl FencedCodeBlock {
         if first == '`' && info.contains('`') {
             return None;
         }
-        Some(FencedCodeBlock {
+        Some(Self {
             indent,
             fence_char: first,
             fence_size: count,
             info,
             content: String::new(),
-            // closed: false,
         })
     }
 
@@ -54,10 +53,7 @@ impl FencedCodeBlock {
                     match iter.next() {
                         Some(' ' | '\t') => continue,
                         Some(_) => break,
-                        None => {
-                            // self.closed = true;
-                            return LineResult::DoneSelf;
-                        },
+                        None => return LineResult::DoneSelf,
                     }
                 }
             }
@@ -73,13 +69,16 @@ impl FencedCodeBlock {
         self.content.push('\n');
         LineResult::None
     }
+    
+    pub fn next_blank(&mut self) -> LineResult {
+        self.content.push('\n');
+        LineResult::None
+    }
 
     pub fn finish(mut self) -> Block {
-        // if self.closed {
-            self.content.pop();
-        // }
+        self.content.pop();
         if let Some(n) = self.info.find(' ') {
-            self.info.truncate(n)
+            self.info.truncate(n);
         }
         let info = if self.info.is_empty() { Vec::new() } else { vec![self.info] };
         Block::CodeBlock((String::new(), info, Vec::new()), self.content)

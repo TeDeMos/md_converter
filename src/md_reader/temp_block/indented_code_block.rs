@@ -2,11 +2,12 @@ use std::iter::Peekable;
 use std::str::Chars;
 
 use super::{
-    skip_indent, AtxHeading, BlockQuote, FencedCodeBlock, LineResult, Paragraph, TempBlock,
-    ThematicBreak,
+    skip_indent, AtxHeading, BlockQuote, FencedCodeBlock, LineResult, List, ListResult, Paragraph,
+    ThematicBreak, ToLineResult,
 };
 use crate::ast::{attr_empty, Block};
 
+#[derive(Debug)]
 pub struct IndentedCodeBlock(Vec<String>);
 
 impl IndentedCodeBlock {
@@ -19,19 +20,44 @@ impl IndentedCodeBlock {
             LineResult::None
         } else {
             match iter.next() {
-                Some(c @ ('~' | '`')) => self.check_fenced_code_block(indent, c, line, &mut iter),
-                Some(c @ ('*' | '_' | '-')) => self.check_thematic_break(c, line, &mut iter),
-                Some('#') => self.check_atx_heading(line, &mut iter),
-                Some('>') => LineResult::DoneSelfAndNew(TempBlock::BlockQuote(BlockQuote::new(
-                    indent, line, &mut iter,
-                ))),
-                Some(_) => LineResult::DoneSelfAndNew(TempBlock::Paragraph(Paragraph::new(line))),
+                Some(c @ ('~' | '`')) => match FencedCodeBlock::check(indent, c, &mut iter) {
+                    Some(b) => b.done_self_and_new(),
+                    None => Paragraph::new(line).done_self_and_new(),
+                },
+                Some(c @ ('*' | '-')) => match List::check_other(c, indent, line, &mut iter) {
+                    ListResult::List(b) => b.done_self_and_new(),
+                    ListResult::Break(b) => b.done_self_and_other(),
+                    ListResult::None => Paragraph::new(line).new(),
+                },
+                Some('_') => match ThematicBreak::check('_', &mut iter) {
+                    Some(b) => b.done_self_and_other(),
+                    None => Paragraph::new(line).done_self_and_new(),
+                },
+                Some('+') => match List::check_plus(indent, line, &mut iter) {
+                    Some(b) => b.done_self_and_new(),
+                    None => Paragraph::new(line).done_self_and_new(),
+                },
+                Some('#') => match AtxHeading::check(&mut iter) {
+                    Some(b) => b.done_self_and_other(),
+                    None => Paragraph::new(line).done_self_and_new(),
+                },
+                Some('>') => BlockQuote::new(indent, line, &mut iter).done_self_and_new(),
+                Some(c @ '0'..='9') => match List::check_number(c, indent, line, &mut iter) {
+                    Some(b) => b.done_self_and_new(),
+                    None => Paragraph::new(line).done_self_and_new(),
+                },
+                Some(_) => Paragraph::new(line).done_self_and_new(),
                 _ => {
                     self.0.push(iter.collect());
                     LineResult::None
                 },
             }
         }
+    }
+
+    pub fn next_blank(&mut self) -> LineResult {
+        self.0.push(String::new());
+        LineResult::None
     }
 
     pub fn finish(mut self) -> Block {
@@ -47,33 +73,5 @@ impl IndentedCodeBlock {
         }
         result.pop();
         Block::CodeBlock(attr_empty(), result)
-    }
-
-    fn check_fenced_code_block(
-        &mut self, indent: usize, first: char, line: &str, rest: &mut Peekable<Chars>,
-    ) -> LineResult {
-        LineResult::DoneSelfAndNew(
-            FencedCodeBlock::check(indent, first, rest)
-                .map(TempBlock::FencedCodeBlock)
-                .unwrap_or_else(|| TempBlock::Paragraph(Paragraph::new(line))),
-        )
-    }
-
-    fn check_thematic_break(
-        &mut self, first: char, line: &str, rest: &mut Peekable<Chars>,
-    ) -> LineResult {
-        ThematicBreak::check(first, rest)
-            .map(|t| LineResult::DoneSelfAndOther(TempBlock::ThematicBreak(t)))
-            .unwrap_or_else(|| {
-                LineResult::DoneSelfAndNew(TempBlock::Paragraph(Paragraph::new(line)))
-            })
-    }
-
-    fn check_atx_heading(&mut self, line: &str, rest: &mut Peekable<Chars>) -> LineResult {
-        AtxHeading::check(rest)
-            .map(|a| LineResult::DoneSelfAndOther(TempBlock::AtxHeading(a)))
-            .unwrap_or_else(|| {
-                LineResult::DoneSelfAndNew(TempBlock::Paragraph(Paragraph::new(line)))
-            })
     }
 }
