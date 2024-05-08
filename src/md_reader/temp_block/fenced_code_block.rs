@@ -1,7 +1,7 @@
 use std::iter::Peekable;
 use std::str::Chars;
 
-use super::{skip_indent, LineResult};
+use super::{skip_indent, LineResult, NewResult, SkipIndent};
 use crate::ast::Block;
 
 #[derive(Debug)]
@@ -14,6 +14,28 @@ pub struct FencedCodeBlock {
 }
 
 impl FencedCodeBlock {
+    pub fn check2(line: SkipIndent) -> NewResult {
+        let mut iter = line.iter_rest();
+        let fence_size = iter.skip_while_eq(line.first) + 1;
+        if fence_size < 3 {
+            return NewResult::Text(line);
+        }
+        iter.skip_whitespace();
+        if line.first == '`' && iter.any_eq('`') {
+            return NewResult::Text(line);
+        }
+        NewResult::New(
+            Self {
+                indent: line.indent,
+                fence_size,
+                fence_char: line.first,
+                info: iter.get_string_trimmed(),
+                content: String::new(),
+            }
+            .into(),
+        )
+    }
+
     pub fn check(indent: usize, first: char, rest: &mut Peekable<Chars>) -> Option<Self> {
         let mut count = 1;
         while rest.next_if_eq(&first).is_some() {
@@ -30,13 +52,7 @@ impl FencedCodeBlock {
         if first == '`' && info.contains('`') {
             return None;
         }
-        Some(Self {
-            indent,
-            fence_char: first,
-            fence_size: count,
-            info,
-            content: String::new(),
-        })
+        Some(Self { indent, fence_char: first, fence_size: count, info, content: String::new() })
     }
 
     pub fn next(&mut self, line: &str) -> LineResult {
@@ -69,7 +85,7 @@ impl FencedCodeBlock {
         self.content.push('\n');
         LineResult::None
     }
-    
+
     pub fn next_blank(&mut self) -> LineResult {
         self.content.push('\n');
         LineResult::None

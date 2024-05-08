@@ -1,5 +1,5 @@
-use std::iter::Peekable;
-use std::str::Chars;
+use std::iter::{Peekable, Rev};
+use std::str::{CharIndices, Chars};
 
 use atx_heading::AtxHeading;
 use block_quote::BlockQuote;
@@ -12,6 +12,7 @@ use table::Table;
 use thematic_break::ThematicBreak;
 
 use crate::ast::Block;
+use crate::md_reader::temp_block::list::StarDashResult;
 
 mod atx_heading;
 mod block_quote;
@@ -43,7 +44,7 @@ impl TempBlock {
 
     pub fn next_no_apply(&mut self, line: &str) -> LineResult {
         match self {
-            Self::Empty => Self::next_empty(line),
+            Self::Empty => Self::next_empty(SkipIndent::new(line, 0)),
             Self::Paragraph(p) => p.next(line),
             Self::IndentedCodeBlock(i) => i.next(line),
             Self::FencedCodeBlock(f) => f.next(line),
@@ -127,45 +128,45 @@ impl TempBlock {
         }
     }
 
-    fn next_empty(line: &str) -> LineResult {
-        let (indent, mut iter) = skip_indent(line, 4);
-        if indent >= 4 {
-            match iter.clone().all(char::is_whitespace) {
-                true => LineResult::None,
-                false => IndentedCodeBlock::new(&mut iter).new(),
-            }
-        } else {
-            match iter.next() {
-                Some(c @ ('~' | '`')) => match FencedCodeBlock::check(indent, c, &mut iter) {
-                    Some(b) => b.new(),
-                    None => Paragraph::new(line).new(),
-                },
-                Some(c @ ('*' | '-')) => match List::check_other(c, indent, line, &mut iter) {
-                    ListResult::List(l) => l.new(),
-                    ListResult::Break(b) => b.done(),
-                    ListResult::None => Paragraph::new(line).new(),
-                },
-                Some('_') => match ThematicBreak::check('_', &mut iter) {
-                    Some(b) => b.done(),
-                    None => Paragraph::new(line).new(),
-                },
-                Some('+') => match List::check_plus(indent, line, &mut iter) {
-                    Some(l) => l.new(),
-                    None => Paragraph::new(line).new(),
-                },
-                Some('#') => match AtxHeading::check(&mut iter) {
-                    Some(b) => b.done(),
-                    None => Paragraph::new(line).new(),
-                },
-                Some('>') => BlockQuote::new(indent, line, &mut iter).new(),
-                Some(c @ '0'..='9') => match List::check_number(c, indent, line, &mut iter) {
-                    Some(b) => b.new(),
-                    None => Paragraph::new(line).new(),
-                },
-                Some(_) => Paragraph::new(line).new(),
-                // _ if !iter.all(char::is_whitespace) => Paragraph::new(line).new(),
-                _ => LineResult::None,
-            }
+    fn next_empty(line: Option<SkipIndent>) -> LineResult {
+        match line {
+            Some(line) => match line.indent {
+                0..=3 => Self::next_empty_known_indent(line),
+                4.. => IndentedCodeBlock::new2(line).new(),
+            },
+            None => LineResult::None,
+        }
+    }
+
+    fn next_empty_known_indent(line: SkipIndent) -> LineResult {
+        match line.first {
+            '~' | '`' => match FencedCodeBlock::check2(line) {
+                NewResult::New(b) => LineResult::New(b),
+                NewResult::Text(s) => Paragraph::new2(s).new(),
+            },
+            '*' | '-' => match List::check_star_dash2(line) {
+                StarDashResult::List(l) => l.new(),
+                StarDashResult::Break(b) => b.done(),
+                StarDashResult::Text(s) => Paragraph::new2(s).new(),
+            },
+            '_' => match ThematicBreak::check2(line) {
+                DoneResult::Done(b) => LineResult::Done(b),
+                DoneResult::Text(s) => Paragraph::new2(s).new(),
+            },
+            '+' => match List::check_plus2(line) {
+                NewResult::New(b) => LineResult::New(b),
+                NewResult::Text(s) => Paragraph::new2(s).new(),
+            },
+            '#' => match AtxHeading::check2(line) {
+                DoneResult::Done(b) => LineResult::Done(b),
+                DoneResult::Text(s) => Paragraph::new2(s).new(),
+            },
+            '>' => BlockQuote::new2(line).new(),
+            '0'..='9' => match List::check_number2(line) {
+                NewResult::New(b) => LineResult::New(b),
+                NewResult::Text(s) => Paragraph::new2(s).new(),
+            },
+            _ => Paragraph::new2(line).new(),
         }
     }
 
@@ -187,6 +188,16 @@ pub enum LineResult {
     DoneSelfAndOther(TempBlock),
 }
 
+pub enum NewResult<'a> {
+    New(TempBlock),
+    Text(SkipIndent<'a>),
+}
+
+pub enum DoneResult<'a> {
+    Done(TempBlock),
+    Text(SkipIndent<'a>),
+}
+
 fn skip_indent(line: &str, limit: usize) -> (usize, Peekable<Chars>) {
     let mut iter = line.chars().peekable();
     let indent = skip_indent_iter(&mut iter, limit);
@@ -206,6 +217,214 @@ fn skip_indent_iter(iter: &mut Peekable<Chars>, limit: usize) -> usize {
             return indent;
         }
     }
+}
+
+#[derive(Clone)]
+pub struct SkipIndent<'a> {
+    first: char,
+    indent: usize,
+    total: usize,
+    line: &'a str,
+}
+
+impl<'a> SkipIndent<'a> {
+    fn new(line: &'a str, indent: usize) -> Option<Self> {
+        let mut total = indent;
+        for (i, c) in line.char_indices() {
+            match c {
+                ' ' => total += 1,
+                '\t' => total = total + (4 - (total % 4)),
+                c => {
+                    return Some(Self {
+                        first: c,
+                        indent: total - indent,
+                        total,
+                        line: unsafe { line.get_unchecked(i..) },
+                    });
+                },
+            }
+        }
+        None
+    }
+
+    fn move_indent(&mut self, indent: usize) { self.indent -= indent; }
+
+    fn get_rest(&self) -> &str { unsafe { self.line.get_unchecked(self.first.len_utf8()..) } }
+
+    fn iter_rest(&self) -> Iter { Iter::new(self.get_rest()) }
+
+    fn indent_iter_rest(&self) -> IndentIter { IndentIter::new(self.get_rest(), self.total + 1) }
+    
+    fn skip_indent_rest(&'a self) -> Option<Self> { Self::new(self.get_rest(), self.total + 1) }
+
+    fn get_full(&self) -> String {
+        match self.indent {
+            0 => self.line.to_owned(),
+            c => " ".repeat(c) + self.line,
+        }
+    }
+}
+
+struct Iter<'a> {
+    source: &'a str,
+    iter: Peekable<CharIndices<'a>>,
+}
+
+impl<'a> Iter<'a> {
+    fn new(source: &'a str) -> Self { Self { source, iter: source.char_indices().peekable() } }
+
+    fn skip_while_eq(&mut self, c: char) -> usize {
+        let mut result = 0;
+        loop {
+            match self.iter.peek() {
+                Some(&(_, current)) if current == c => {
+                    self.iter.next();
+                    result += 1;
+                },
+                Some(_) | None => return result,
+            }
+        }
+    }
+
+    fn skip_whitespace(&mut self) {
+        loop {
+            match self.iter.peek() {
+                Some((_, ' ' | '\t')) => {
+                    self.iter.next();
+                },
+                Some(_) | None => return,
+            }
+        }
+    }
+    
+    fn skip_whitespace_min_one(&mut self) -> bool {
+        let mut any = false;
+        loop {
+            match self.iter.peek() {
+                Some((_, ' ' | '\t')) => {
+                    any = true;
+                    self.iter.next();
+                },
+                Some(_) | None => return any,
+            }
+        }
+    }
+    
+    fn ended(&mut self) -> bool {
+        self.iter.peek().is_none()
+    }
+
+    fn get_str(&mut self) -> &str {
+        match self.iter.peek() {
+            Some(&(i, _)) => unsafe { self.source.get_unchecked(i..) },
+            None => "",
+        }
+    }
+
+    fn iter_rest_rev(&mut self) -> RevIter { RevIter::new(self.get_str()) }
+
+    fn any_eq(&self, c: char) -> bool { self.iter.clone().any(|(_, current)| current == c) }
+
+    fn get_string(&mut self) -> String { self.get_str().to_owned() }
+
+    fn get_string_trimmed(&mut self) -> String { self.get_str().trim_end().to_owned() }
+}
+
+struct IndentIter<'a> {
+    indent: usize,
+    source: &'a str,
+    iter: Peekable<CharIndices<'a>>,
+}
+
+impl<'a> IndentIter<'a> {
+    fn new(source: &'a str, indent: usize) -> Self {
+        Self { indent, source, iter: source.char_indices().peekable() }
+    }
+
+    fn get_number(&mut self, first: char) -> Option<(usize, usize)> {
+        let mut result = first as usize - '0' as usize;
+        let mut length = 1;
+        loop {
+            match self.iter.peek() {
+                Some(&(_, c @ '0'..='9')) => {
+                    length += 1;
+                    if length > 9 {
+                        return None;
+                    }
+                    result = 10 * result + (c as usize - '0' as usize);
+                    self.indent += 1;
+                    self.iter.next();
+                },
+                Some(_) | None => return Some((result, length)),
+            }
+        }
+    }
+    
+    fn get_closing(&mut self) -> Option<char> {
+        self.iter.next_if(|(_, c)| matches!(c, '.' | ')')).map(|x| x.1)
+    }
+
+    fn skip_indent(&mut self) -> Option<SkipIndent> {
+        match self.iter.peek() {
+            Some(&(i, _)) =>
+                SkipIndent::new(unsafe { self.source.get_unchecked(i..) }, self.indent),
+            None => None,
+        }
+    }
+}
+
+struct RevIter<'a> {
+    source: &'a str,
+    iter: Peekable<Rev<CharIndices<'a>>>,
+}
+
+impl<'a> RevIter<'a> {
+    fn new(source: &'a str) -> Self {
+        Self { source, iter: source.char_indices().rev().peekable() }
+    }
+
+    fn skip_while_eq(&mut self, c: char) -> usize {
+        let mut count = 0;
+        loop {
+            match self.iter.peek() {
+                Some(&(_, current)) if current == c => {
+                    count += 1;
+                    self.iter.next();
+                },
+                Some(_) | None => return count,
+            }
+        }
+    }
+
+    fn skip_whitespace(&mut self) {
+        loop {
+            match self.iter.peek() {
+                Some(&(_, ' ' | '\t')) => {
+                    self.iter.next();
+                },
+                Some(_) | None => return,
+            }
+        }
+    }
+    
+    fn get_str(&mut self) -> &str {
+        match self.iter.peek() {
+            Some(&(i, c)) => unsafe { self.source.get_unchecked(..i + c.len_utf8()) },
+            None => "",
+        }
+    }
+
+    fn next_if_whitespace_or_none(&mut self) -> bool {
+        match self.iter.peek() {
+            Some((_, ' ' | '\t')) | None => {
+                self.iter.next();
+                true
+            },
+            Some(_) => false,
+        }
+    }
+
+    fn get_string(&mut self) -> String { self.get_str().to_owned() }
 }
 
 trait ToLineResult {

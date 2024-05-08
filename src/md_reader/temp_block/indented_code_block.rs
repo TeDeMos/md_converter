@@ -1,16 +1,18 @@
 use std::iter::Peekable;
 use std::str::Chars;
 
-use super::{
-    skip_indent, AtxHeading, BlockQuote, FencedCodeBlock, LineResult, List, ListResult, Paragraph,
-    ThematicBreak, ToLineResult,
-};
+use super::{skip_indent, AtxHeading, BlockQuote, FencedCodeBlock, LineResult, List, ListResult, Paragraph, ThematicBreak, ToLineResult, SkipIndent};
 use crate::ast::{attr_empty, Block};
 
 #[derive(Debug)]
 pub struct IndentedCodeBlock(Vec<String>);
 
 impl IndentedCodeBlock {
+    pub fn new2(mut line: SkipIndent) -> Self {
+        line.move_indent(4);
+        Self(vec![line.get_full()])
+    }
+    
     pub fn new(rest: &mut Peekable<Chars>) -> Self { Self(vec![rest.collect()]) }
 
     pub fn next(&mut self, line: &str) -> LineResult {

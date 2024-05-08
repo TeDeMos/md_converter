@@ -4,7 +4,7 @@ use std::str::Chars;
 
 use super::{
     skip_indent, skip_indent_iter, AtxHeading, FencedCodeBlock, IndentedCodeBlock, LineResult,
-    Paragraph, TempBlock, ThematicBreak, ToLineResult,
+    NewResult, Paragraph, SkipIndent, TempBlock, ThematicBreak, ToLineResult,
 };
 use crate::ast::{new_list_attributes, Block};
 
@@ -30,6 +30,18 @@ struct Ordered {
 }
 
 impl List {
+    fn new2(current: ListItem, list_type: ListType) -> Self {
+        Self { list_type, items: Vec::new(), current, loose: false, gap: false }
+    }
+
+    pub fn check_star_dash2(line: SkipIndent) -> StarDashResult {
+        ListItem::check_star_dash2(line).into()
+    }
+
+    pub fn check_plus2(line: SkipIndent) -> NewResult { ListItem::check_plus2(line).into() }
+
+    pub fn check_number2(line: SkipIndent) -> NewResult { ListItem::check_number2(line) }
+
     fn new_unordered_empty(indent: usize, marker: char) -> Self {
         Self {
             list_type: ListType::Unordered(marker),
@@ -554,7 +566,151 @@ struct ListItem {
     indent: usize,
 }
 
+pub enum StarDashResult<'a> {
+    List(List),
+    Break(ThematicBreak),
+    Text(SkipIndent<'a>),
+}
+
+enum StarDashItemResult<'a> {
+    Item(ListItem, char),
+    Break(ThematicBreak),
+    Text(SkipIndent<'a>),
+}
+
+impl<'a> From<StarDashItemResult<'a>> for StarDashResult<'a> {
+    fn from(value: StarDashItemResult<'a>) -> Self {
+        match value {
+            StarDashItemResult::Item(l, c) => Self::List(List::new2(l, ListType::Unordered(c))),
+            StarDashItemResult::Break(b) => Self::Break(b),
+            StarDashItemResult::Text(s) => Self::Text(s),
+        }
+    }
+}
+
+enum PlusResult<'a> {
+    New(ListItem),
+    Text(SkipIndent<'a>),
+}
+
+impl<'a> From<PlusResult<'a>> for NewResult<'a> {
+    fn from(value: PlusResult<'a>) -> Self {
+        match value {
+            PlusResult::New(l) => Self::New(List::new2(l, ListType::Unordered('+')).into()),
+            PlusResult::Text(s) => Self::Text(s),
+        }
+    }
+}
+
 impl ListItem {
+    fn new_empty2(width: usize, indent: usize) -> Self {
+        Self {
+            finished: Vec::new(),
+            current: Box::new(TempBlock::Empty),
+            done: false,
+            width,
+            indent,
+        }
+    }
+
+    fn new2(width: usize, indent: usize, content: SkipIndent) -> Self {
+        let mut current = TempBlock::Empty;
+        let mut finished = Vec::new();
+        current.apply_result(TempBlock::next_empty_known_indent(content), &mut finished);
+        Self { finished, current: Box::new(current), done: false, width, indent }
+    }
+
+    fn new_code2(width: usize, indent: usize, mut content: SkipIndent) -> Self {
+        content.move_indent(1);
+        Self {
+            finished: Vec::new(),
+            current: Box::new(IndentedCodeBlock::new2(content).into()),
+            done: false,
+            width,
+            indent,
+        }
+    }
+
+    fn check_star_dash2(line: SkipIndent) -> StarDashItemResult {
+        match line.skip_indent_rest() {
+            Some(rest) => {
+                if Self::check_thematic2(&line, &rest) {
+                    return StarDashItemResult::Break(ThematicBreak);
+                }
+                match rest.indent {
+                    0 => StarDashItemResult::Text(line),
+                    i @ 1..=4 =>
+                        StarDashItemResult::Item(Self::new2(1 + i, line.indent, rest), line.first),
+                    5.. =>
+                        StarDashItemResult::Item(Self::new_code2(2, line.indent, rest), line.first),
+                }
+            },
+            None => StarDashItemResult::Item(Self::new_empty2(2, line.indent), line.first),
+        }
+    }
+
+    pub fn check_plus2(line: SkipIndent) -> PlusResult {
+        match line.skip_indent_rest() {
+            Some(rest) => match rest.indent {
+                0 => PlusResult::Text(line),
+                i @ 1..=4 => PlusResult::New(Self::new2(1 + i, line.indent, rest)),
+                5.. => PlusResult::New(Self::new_code2(2, line.indent, rest)),
+            },
+            None => PlusResult::New(Self::new_empty2(2, line.indent)),
+        }
+    }
+
+    pub fn check_number2(line: SkipIndent) -> NewResult {
+        let mut iter = line.indent_iter_rest();
+        let Some((starting, width)) = iter.get_number(line.first) else {
+            return NewResult::Text(line);
+        };
+        let Some(closing) = iter.get_closing() else {
+            return NewResult::Text(line);
+        };
+        match iter.skip_indent() {
+            Some(rest) => match rest.indent {
+                0 => NewResult::Text(line),
+                i @ 1..=4 => NewResult::New(
+                    List::new2(
+                        Self::new2(width + 1 + i, line.indent, rest),
+                        ListType::Ordered(Ordered { starting: starting as _, closing }),
+                    )
+                    .into(),
+                ),
+                5.. => NewResult::New(
+                    List::new2(
+                        Self::new_code2(width + 2, line.indent, rest),
+                        ListType::Ordered(Ordered { starting: starting as _, closing }),
+                    )
+                    .into(),
+                ),
+            },
+            None => NewResult::New(
+                List::new2(
+                    Self::new_empty2(width + 2, line.indent),
+                    ListType::Ordered(Ordered { starting: starting as _, closing }),
+                )
+                .into(),
+            ),
+        }
+    }
+
+    fn check_thematic2(line: &SkipIndent, rest: &SkipIndent) -> bool {
+        if line.first != rest.first {
+            return false;
+        }
+        let mut third = false;
+        for c in rest.get_rest().chars() {
+            match c {
+                ' ' | '\t' => continue,
+                c if c == rest.first => third = true,
+                _ => return false,
+            }
+        }
+        third
+    }
+
     fn new_empty(width: usize, indent: usize) -> Self {
         Self {
             finished: Vec::new(),

@@ -1,7 +1,4 @@
-use super::{
-    skip_indent, AtxHeading, BlockQuote, FencedCodeBlock, LineResult, List, ListResult,
-    ThematicBreak, ToLineResult,
-};
+use super::{skip_indent, AtxHeading, BlockQuote, FencedCodeBlock, LineResult, List, ListResult, ThematicBreak, ToLineResult, SkipIndent};
 use crate::ast::{Alignment, Block};
 
 #[derive(Debug)]
@@ -98,6 +95,31 @@ impl Table {
     fn push(&mut self, line: &str) -> LineResult {
         self.split_rows(line);
         LineResult::None
+    }
+
+    pub fn check_header2(line: SkipIndent) -> usize {
+        let mut iter = line.line.chars();
+        let mut count = 1;
+        let mut escape = match iter.next() {
+            Some('\\') => true,
+            _ => false,
+        };
+        let mut detected = false;
+        for c in iter {
+            if detected && !matches!(c, ' ' | '\t') {
+                detected = false;
+                count += 1;
+            }
+            if c == '\\' {
+                escape = !escape;
+            } else {
+                if c == '|' {
+                    detected = !escape
+                }
+                escape = false;
+            }
+        }
+        count
     }
 
     pub fn check_header(line: &str) -> usize {

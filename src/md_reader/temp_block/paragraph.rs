@@ -1,10 +1,7 @@
 use std::iter::Peekable;
 use std::str::Chars;
 
-use super::{
-    skip_indent, AtxHeading, BlockQuote, FencedCodeBlock, LineResult, List, ListResult,
-    ParagraphListResult, Table, ThematicBreak, ToLineResult,
-};
+use super::{skip_indent, AtxHeading, BlockQuote, FencedCodeBlock, LineResult, List, ListResult, ParagraphListResult, Table, ThematicBreak, ToLineResult, SkipIndent};
 use crate::ast::Block;
 use crate::inline_parser::InlineParser;
 
@@ -16,6 +13,14 @@ pub struct Paragraph {
 }
 
 impl Paragraph {
+    pub fn new2(line: SkipIndent) -> Self {
+        Self {
+            lines: vec![line.get_full()],
+            table_header_length: Table::check_header2(line),
+            setext: 0,
+        }
+    }
+    
     pub fn new(line: &str) -> Self {
         Self {
             lines: vec![line.to_owned()],
@@ -23,6 +28,7 @@ impl Paragraph {
             setext: 0,
         }
     }
+    
 
     pub fn next(&mut self, line: &str) -> LineResult {
         let (indent, mut iter) = skip_indent(line.trim_end(), 4);

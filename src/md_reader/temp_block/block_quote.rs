@@ -2,10 +2,7 @@ use std::iter;
 use std::iter::Peekable;
 use std::str::Chars;
 
-use super::{
-    skip_indent, AtxHeading, FencedCodeBlock, IndentedCodeBlock, LineResult, List, ListResult,
-    Paragraph, TempBlock, ThematicBreak, ToLineResult,
-};
+use super::{skip_indent, AtxHeading, FencedCodeBlock, IndentedCodeBlock, LineResult, List, ListResult, Paragraph, TempBlock, ThematicBreak, ToLineResult, SkipIndent, NewResult};
 use crate::ast::Block;
 
 #[derive(Debug)]
@@ -15,6 +12,18 @@ pub struct BlockQuote {
 }
 
 impl BlockQuote {
+    pub fn new2(line: SkipIndent) -> Self {
+        let mut current = TempBlock::Empty;
+        let mut finished = Vec::new();
+        let mut content = line.skip_indent_rest();
+        match content.as_mut() {
+            Some(c) => if c.indent > 0 { c.move_indent(1); },
+            None => {}
+        }
+        current.apply_result(TempBlock::next_empty(content), &mut finished);
+        Self { current: Box::new(current), finished }
+    }
+    
     pub fn new(indent: usize, line: &str, rest: &mut Peekable<Chars>) -> Self {
         // Safety: skip_indent only accepts tabs and spaces - 1 byte chars
         let line =
