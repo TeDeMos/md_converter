@@ -16,7 +16,7 @@ impl AstReader for MdReader {
         let mut current = TempBlock::default();
         let mut finished: Vec<TempBlock> = Vec::new();
         for line in source.lines() {
-            current.next(line, &mut finished);
+            current.next_line(line, &mut finished);
         }
         let result =
             finished.into_iter().chain(iter::once(current)).filter_map(TempBlock::finish).collect();
@@ -84,7 +84,7 @@ mod tests {
     fn setext_headings() { test(50, 76) }
 
     #[test]
-    fn indented_code_blocks() { test(77, 88 ) }
+    fn indented_code_blocks() { test(77, 88) }
 
     #[test]
     fn fenced_code_blocks() { test(89, 117) }

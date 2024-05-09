@@ -1,36 +1,35 @@
-use super::{skip_indent, AtxHeading, BlockQuote, FencedCodeBlock, LineResult, List, ListResult, ThematicBreak, ToLineResult, SkipIndent};
+use super::{
+    AtxHeading, BlockQuote, DoneResult, FencedCodeBlock, IndentedCodeBlock, LineResult, List,
+    ListBreakResult, NewResult, Paragraph, SkipIndent, SkipIndentResult, ThematicBreak,
+    ToLineResult,
+};
 use crate::ast::{Alignment, Block};
 
 #[derive(Debug)]
-pub struct Table {
+pub(crate) struct Table {
     size: usize,
     alignments: Vec<Alignment>,
     rows: Vec<Vec<String>>,
 }
 
 impl Table {
-    pub fn check(line: &str, header_line: &str, header_length: usize) -> Option<Self> {
-        if header_length == 0 {
-            return None;
+    pub(crate) fn check<'a>(line: SkipIndent<'a>, paragraph: &mut Paragraph) -> NewResult<'a> {
+        if paragraph.table_header_length == 0 {
+            return NewResult::Text(line);
         }
-        let mut iter = line.trim().chars().peekable();
-        iter.next_if_eq(&'|');
+        let mut iter = line.iter_full();
+        iter.next_if_eq('|');
         let mut alignments = Vec::new();
-        for i in 0..header_length {
-            while matches!(iter.peek(), Some(' ' | '\t')) {
-                iter.next();
+        for i in 0..paragraph.table_header_length {
+            iter.skip_whitespace();
+            let left = iter.next_if_eq(':');
+            if !iter.skip_while_eq_min_one('-') {
+                return NewResult::Text(line);
             }
-            let left = iter.next_if_eq(&':').is_some();
-            iter.next_if_eq(&'-')?;
-            while iter.peek() == Some(&'-') {
-                iter.next();
-            }
-            let right = iter.next_if_eq(&':').is_some();
-            while matches!(iter.peek(), Some(' ' | '\t')) {
-                iter.next();
-            }
-            if iter.next_if_eq(&'|').is_none() && i != header_length - 1 {
-                return None;
+            let right = iter.next_if_eq(':');
+            iter.skip_whitespace();
+            if !iter.next_if_eq('|') && i != paragraph.table_header_length - 1 {
+                return NewResult::Text(line);
             }
             alignments.push(match (left, right) {
                 (false, false) => Alignment::Default,
@@ -39,66 +38,66 @@ impl Table {
                 (true, true) => Alignment::Center,
             });
         }
-        iter.next().is_none().then(|| {
-            let mut result = Self { size: header_length, alignments, rows: vec![] };
-            result.split_rows(header_line);
-            result
-        })
-    }
-
-    pub fn next(&mut self, line: &str) -> LineResult {
-        let (indent, mut iter) = skip_indent(line, 4);
-        if indent >= 4 {
-            match iter.clone().all(char::is_whitespace) {
-                false => self.push(line),
-                true => LineResult::DoneSelf,
-            }
+        iter.skip_whitespace();
+        if iter.ended() {
+            let mut result =
+                Self { size: paragraph.table_header_length, alignments, rows: Vec::new() };
+            result.split_rows(&paragraph.lines.pop().unwrap());
+            NewResult::New(result.into())
         } else {
-            match iter.next() {
-                Some(c @ ('~' | '`')) => match FencedCodeBlock::check(indent, c, &mut iter) {
-                    Some(b) => b.done_self_and_new(),
-                    None => self.push(line),
-                },
-                Some(c @ ('*' | '-')) => match List::check_other(c, indent, line, &mut iter) {
-                    ListResult::List(b) => b.done_self_and_new(),
-                    ListResult::Break(b) => b.done_self_and_other(),
-                    ListResult::None => self.push(line),
-                },
-                Some('_') => match ThematicBreak::check('_', &mut iter) {
-                    Some(b) => b.done_self_and_other(),
-                    None => self.push(line),
-                },
-                Some('+') => match List::check_plus(indent, line, &mut iter) {
-                    Some(b) => b.done_self_and_new(),
-                    None => self.push(line),
-                },
-                Some('#') => match AtxHeading::check(&mut iter) {
-                    Some(b) => b.done_self_and_other(),
-                    None => self.push(line),
-                },
-                Some('>') => BlockQuote::new(indent, line, &mut iter).done_self_and_new(),
-                Some(c @ '0'..='9') => match List::check_number(c, indent, line, &mut iter) {
-                    Some(b) => b.done_self_and_new(),
-                    None => self.push(line),
-                },
-                Some(_) => self.push(line),
-                // _ if !iter.all(char::is_whitespace) => self.push(line),
-                _ => LineResult::DoneSelf,
-            }
+            NewResult::Text(line)
         }
     }
 
-    pub fn next_blank(&mut self) -> LineResult { LineResult::DoneSelf }
+    pub(crate) fn next(&mut self, line: SkipIndentResult) -> LineResult {
+        match line {
+            SkipIndentResult::Line(line) => match line.indent {
+                0..=3 => match line.first {
+                    '~' | '`' => match FencedCodeBlock::check(line) {
+                        NewResult::New(b) => LineResult::DoneSelfAndNew(b),
+                        NewResult::Text(s) => self.push(s.line),
+                    },
+                    '*' | '-' => match List::check_star_dash(line) {
+                        ListBreakResult::List(l) => l.done_self_and_new(),
+                        ListBreakResult::Break(b) => b.done_self_and_other(),
+                        ListBreakResult::Text(s) => self.push(s.line),
+                    },
+                    '_' => match ThematicBreak::check(line) {
+                        DoneResult::Done(b) => LineResult::DoneSelfAndNew(b),
+                        DoneResult::Text(s) => self.push(s.line),
+                    },
+                    '+' => match List::check_plus(line) {
+                        NewResult::New(b) => LineResult::DoneSelfAndNew(b),
+                        NewResult::Text(s) => self.push(s.line),
+                    },
+                    '#' => match AtxHeading::check(line) {
+                        DoneResult::Done(b) => LineResult::DoneSelfAndOther(b),
+                        DoneResult::Text(s) => self.push(s.line),
+                    },
+                    '>' => BlockQuote::new(line).done_self_and_new(),
+                    '0'..='9' => match List::check_number(line) {
+                        NewResult::New(b) => LineResult::DoneSelfAndNew(b),
+                        NewResult::Text(s) => self.push(s.line),
+                    },
+                    _ => self.push(line.line),
+                },
+                4.. => IndentedCodeBlock::new(line).done_self_and_new(),
+            },
+            SkipIndentResult::Blank(_) => LineResult::DoneSelf,
+        }
+    }
 
-    pub fn finish(self) -> Block { Block::new_table(self.rows, self.alignments, self.size) }
+    pub(crate) fn next_blank(&mut self) -> LineResult { LineResult::DoneSelf }
+
+    pub(crate) fn finish(self) -> Block { Block::new_table(self.rows, self.alignments, self.size) }
 
     fn push(&mut self, line: &str) -> LineResult {
         self.split_rows(line);
         LineResult::None
     }
 
-    pub fn check_header2(line: SkipIndent) -> usize {
-        let mut iter = line.line.chars();
+    pub(crate) fn check_header(line: &str) -> usize {
+        let mut iter = line.chars();
         let mut count = 1;
         let mut escape = match iter.next() {
             Some('\\') => true,
@@ -120,34 +119,6 @@ impl Table {
             }
         }
         count
-    }
-
-    pub fn check_header(line: &str) -> usize {
-        let mut iter = line.trim().chars();
-        let (mut count, mut escape, first) = match iter.next() {
-            Some('\\') => (0, true, false),
-            Some('|') => (1, false, true),
-            _ => (0, false, false),
-        };
-        let mut previous = false;
-        for c in iter {
-            if c == '\\' && !escape {
-                escape = true;
-                previous = false;
-            } else if c == '|' && !escape {
-                count += 1;
-                previous = true;
-                escape = false;
-            } else {
-                escape = false;
-                previous = false;
-            }
-        }
-        if count == 0 {
-            0
-        } else {
-            count + 1 - usize::from(previous) - usize::from(first)
-        }
     }
 
     fn split_rows(&mut self, line: &str) {

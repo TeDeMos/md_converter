@@ -1,121 +1,136 @@
-use std::iter::Peekable;
-use std::str::Chars;
-
-use super::{skip_indent, AtxHeading, BlockQuote, FencedCodeBlock, LineResult, List, ListResult, ParagraphListResult, Table, ThematicBreak, ToLineResult, SkipIndent};
+use super::{
+    AtxHeading, BlockQuote, DoneResult, FencedCodeBlock, LineResult, List, ListBreakResult,
+    ListBreakSetextResult, NewResult, SkipIndent, SkipIndentResult, Table, ThematicBreak,
+    ToLineResult,
+};
 use crate::ast::Block;
 use crate::inline_parser::InlineParser;
 
 #[derive(Debug)]
-pub struct Paragraph {
-    lines: Vec<String>,
-    table_header_length: usize,
+pub(crate) struct Paragraph {
+    pub(crate) lines: Vec<String>,
+    pub(crate) table_header_length: usize,
     setext: usize,
 }
 
 impl Paragraph {
-    pub fn new2(line: SkipIndent) -> Self {
+    pub(crate) fn new(line: SkipIndent) -> Self {
         Self {
-            lines: vec![line.get_full()],
-            table_header_length: Table::check_header2(line),
+            lines: vec![line.line.to_owned()],
+            table_header_length: Table::check_header(line.line),
             setext: 0,
         }
     }
-    
-    pub fn new(line: &str) -> Self {
-        Self {
-            lines: vec![line.to_owned()],
-            table_header_length: Table::check_header(line),
-            setext: 0,
-        }
-    }
-    
 
-    pub fn next(&mut self, line: &str) -> LineResult {
-        let (indent, mut iter) = skip_indent(line.trim_end(), 4);
-        if indent >= 4 {
-            self.push(line, false)
-        } else {
-            match iter.next() {
-                Some(c @ ('~' | '`')) => match FencedCodeBlock::check(indent, c, &mut iter) {
-                    Some(b) => b.done_self_and_new(),
-                    None => self.push(line, false),
-                },
-                Some('*') => match List::check_star_non_empty(indent, line, &mut iter) {
-                    ListResult::List(b) => b.done_self_and_new(),
-                    ListResult::Break(b) => b.done_self_and_other(),
-                    ListResult::None => self.push(line, false),
-                },
-                Some('-') => match List::check_dash_paragraph(indent, line, &mut iter) {
-                    ParagraphListResult::List(b) => b.done_self_and_new(),
-                    ParagraphListResult::Break(b) => b.done_self_and_other(),
-                    ParagraphListResult::Setext => {
-                        self.setext = 2;
-                        LineResult::DoneSelf
+    pub(crate) fn next(&mut self, line: SkipIndentResult) -> LineResult {
+        match line {
+            SkipIndentResult::Line(line) => match line.indent {
+                0..=3 => match line.first {
+                    '~' | '`' => match FencedCodeBlock::check(line) {
+                        NewResult::New(b) => LineResult::DoneSelfAndNew(b),
+                        NewResult::Text(s) => self.push_full_check(s),
                     },
-                    ParagraphListResult::None => self.push(line, false),
+                    '*' => match List::check_star_paragraph(line) {
+                        ListBreakResult::List(l) => l.done_self_and_new(),
+                        ListBreakResult::Break(b) => b.done_self_and_other(),
+                        ListBreakResult::Text(s) => self.push_full_check(s),
+                    },
+                    '-' => match List::check_dash_paragraph(line) {
+                        ListBreakSetextResult::List(b) => b.done_self_and_new(),
+                        ListBreakSetextResult::Break(b) => b.done_self_and_other(),
+                        ListBreakSetextResult::Setext => {
+                            self.setext = 2;
+                            LineResult::DoneSelf
+                        },
+                        ListBreakSetextResult::Text(s) => self.push_full_check(s),
+                    },
+                    '_' => match ThematicBreak::check(line) {
+                        DoneResult::Done(b) => LineResult::DoneSelfAndNew(b),
+                        DoneResult::Text(s) => self.push_full_check(s),
+                    },
+                    '+' => match List::check_plus_paragraph(line) {
+                        NewResult::New(b) => LineResult::DoneSelfAndNew(b),
+                        NewResult::Text(s) => self.push_full_check(s),
+                    },
+                    '#' => match AtxHeading::check(line) {
+                        DoneResult::Done(b) => LineResult::DoneSelfAndNew(b),
+                        DoneResult::Text(s) => self.push_full_check(s),
+                    },
+                    '>' => BlockQuote::new(line).done_self_and_new(),
+                    '1' => match List::check_number_paragraph(line) {
+                        NewResult::New(b) => LineResult::DoneSelfAndNew(b),
+                        NewResult::Text(s) => self.push_full_check(s),
+                    },
+                    '=' => self.push_check_setext(line),
+                    _ => self.push_full_check(line),
                 },
-                Some('_') => match ThematicBreak::check('_', &mut iter) {
-                    Some(b) => b.done_self_and_other(),
-                    None => self.push(line, false),
+                4.. => {
+                    self.push_header_check(line);
+                    LineResult::None
                 },
-                Some('+') => match List::check_plus_non_empty(indent, line, &mut iter) {
-                    Some(b) => b.done_self_and_new(),
-                    None => self.push(line, false),
-                },
-                Some('#') => match AtxHeading::check(&mut iter) {
-                    Some(b) => b.done_self_and_other(),
-                    None => self.push(line, false),
-                },
-                Some('>') => BlockQuote::new(indent, line, &mut iter).done_self_and_new(),
-                Some('1') => match List::check_number_paragraph(indent, line, &mut iter) {
-                    Some(b) => b.done_self_and_new(),
-                    None => self.push(line, false),
-                },
-                Some('=') => self.check_equals_setext(line, &mut iter),
-                _ if !iter.all(char::is_whitespace) => self.push(line, false),
-                _ => LineResult::DoneSelf,
-            }
+            },
+            SkipIndentResult::Blank(_) => LineResult::DoneSelf,
         }
     }
 
-    pub fn continuation(
-        &mut self, indent: usize, first: Option<char>, line: &str, iter: &mut Peekable<Chars>,
-    ) -> LineResult {
-        match first {
-            Some(c @ ('~' | '`')) => match FencedCodeBlock::check(indent, c, iter) {
-                Some(b) => b.done_self_and_new(),
-                None => self.push(line, true),
+    pub(crate) fn next_continuation(&mut self, line: SkipIndent) -> LineResult {
+        match line.first {
+            '~' | '`' => match FencedCodeBlock::check(line) {
+                NewResult::New(b) => LineResult::DoneSelfAndNew(b),
+                NewResult::Text(s) => {
+                    self.push_header_no_indent_check(s);
+                    LineResult::None
+                },
             },
-            Some(c @ ('-' | '*')) => match List::check_other(c, indent, line, iter) {
-                ListResult::List(b) => b.done_self_and_new(),
-                ListResult::Break(b) => b.done_self_and_other(),
-                ListResult::None => self.push(line, true),
+            '*' | '-' => match List::check_star_dash(line) {
+                ListBreakResult::List(l) => l.done_self_and_new(),
+                ListBreakResult::Break(b) => b.done_self_and_other(),
+                ListBreakResult::Text(s) => {
+                    self.push_header_no_indent_check(s);
+                    LineResult::None
+                },
             },
-            Some('_') => match ThematicBreak::check('_', iter) {
-                Some(b) => b.done_self_and_other(),
-                None => self.push(line, true),
+            '_' => match ThematicBreak::check(line) {
+                DoneResult::Done(b) => LineResult::DoneSelfAndNew(b),
+                DoneResult::Text(s) => {
+                    self.push_header_no_indent_check(s);
+                    LineResult::None
+                },
             },
-            Some('+') => match List::check_plus(indent, line, iter) {
-                Some(b) => b.done_self_and_new(),
-                None => self.push(line, true),
+            '+' => match List::check_plus(line) {
+                NewResult::New(b) => LineResult::DoneSelfAndNew(b),
+                NewResult::Text(s) => {
+                    self.push_header_no_indent_check(s);
+                    LineResult::None
+                },
             },
-            Some('#') => match AtxHeading::check(iter) {
-                Some(b) => b.done_self_and_other(),
-                None => self.push(line, true),
+            '#' => match AtxHeading::check(line) {
+                DoneResult::Done(b) => LineResult::DoneSelfAndNew(b),
+                DoneResult::Text(s) => {
+                    self.push_header_no_indent_check(s);
+                    LineResult::None
+                },
             },
-            Some('>') => BlockQuote::new(indent, line, iter).done_self_and_new(),
-            Some('1') => match List::check_number_paragraph(indent, line, iter) {
-                Some(b) => b.done_self_and_new(),
-                None => self.push(line, true),
+            '>' => BlockQuote::new(line).done_self_and_new(),
+            '0'..='9' => match List::check_number(line) {
+                NewResult::New(b) => LineResult::DoneSelfAndNew(b),
+                NewResult::Text(s) => {
+                    self.push_header_no_indent_check(s);
+                    LineResult::None
+                },
             },
-            _ if !iter.all(char::is_whitespace) => self.push(line, true),
-            _ => LineResult::DoneSelf,
+            _ => {
+                self.push_header_no_indent_check(line);
+                LineResult::None
+            },
         }
     }
 
-    pub fn next_blank(&self) -> LineResult { LineResult::DoneSelf }
+    pub(crate) fn next_indented_continuation(&mut self, line: SkipIndent) { self.push_no_checks(line); }
 
-    pub fn finish(self) -> Block {
+    pub(crate) fn next_blank(&self) -> LineResult { LineResult::DoneSelf }
+
+    pub(crate) fn finish(self) -> Block {
         let parsed = InlineParser::parse_lines(&self.lines);
         match self.setext {
             0 => Block::Para(parsed),
@@ -123,15 +138,14 @@ impl Paragraph {
         }
     }
 
-    pub fn over_indented_continuation(&mut self, line: &str) { self.push(line, true); }
-
-    fn check_equals_setext(&mut self, line: &str, rest: &mut Peekable<Chars>) -> LineResult {
+    fn push_check_setext(&mut self, line: SkipIndent) -> LineResult {
         let mut whitespace = false;
+        let mut iter = line.line.chars();
         loop {
-            match rest.next() {
+            match iter.next() {
                 Some('=') if !whitespace => continue,
                 Some(' ' | '\t') => whitespace = true,
-                Some(_) => return self.push(line, false),
+                Some(_) => return self.push_full_check(line),
                 None => {
                     self.setext = 1;
                     return LineResult::DoneSelf;
@@ -140,21 +154,29 @@ impl Paragraph {
         }
     }
 
-    pub fn push(&mut self, line: &str, non_split: bool) -> LineResult {
-        // Safety: paragraph is initialized with one item in vector, pop can't return None
-        if !non_split
-            && let Some(t) =
-                Table::check(line, self.lines.last().unwrap(), self.table_header_length)
-        {
-            self.lines.pop();
-            match self.lines.is_empty() {
-                true => t.new(),
-                false => t.done_self_and_new(),
-            }
-        } else {
-            self.lines.push(line.to_owned());
-            self.table_header_length = Table::check_header(line);
-            LineResult::None
+    fn push_full_check(&mut self, line: SkipIndent) -> LineResult {
+        match Table::check(line, self) {
+            NewResult::New(b) => match self.lines.is_empty() {
+                true => LineResult::New(b),
+                false => LineResult::DoneSelfAndNew(b),
+            },
+            NewResult::Text(t) => {
+                self.lines.push(t.line.to_owned());
+                self.table_header_length = Table::check_header(t.line);
+                LineResult::None
+            },
         }
     }
+
+    fn push_header_check(&mut self, line: SkipIndent) {
+        self.lines.push(line.line.to_owned());
+        self.table_header_length = Table::check_header(line.line);
+    }
+
+    fn push_header_no_indent_check(&mut self, line: SkipIndent) {
+        self.lines.push(line.line.to_owned());
+        self.table_header_length = if line.indent > 0 { 0 } else { Table::check_header(line.line) };
+    }
+
+    fn push_no_checks(&mut self, line: SkipIndent) { self.lines.push(line.line.to_owned()); }
 }

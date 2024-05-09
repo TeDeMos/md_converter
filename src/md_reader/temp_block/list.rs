@@ -1,10 +1,8 @@
 use std::iter;
-use std::iter::Peekable;
-use std::str::Chars;
 
 use super::{
-    skip_indent, skip_indent_iter, AtxHeading, FencedCodeBlock, IndentedCodeBlock, LineResult,
-    NewResult, Paragraph, SkipIndent, TempBlock, ThematicBreak, ToLineResult,
+    AtxHeading, BlockQuote, DoneResult, FencedCodeBlock, IndentedCodeBlock, LineResult, NewResult,
+    Paragraph, SkipIndent, SkipIndentResult, TempBlock, ThematicBreak, ToLineResult,
 };
 use crate::ast::{new_list_attributes, Block};
 
@@ -12,7 +10,7 @@ use crate::ast::{new_list_attributes, Block};
 pub struct List {
     list_type: ListType,
     items: Vec<ListItem>,
-    current: ListItem,
+    current: Option<ListItem>,
     loose: bool,
     gap: bool,
 }
@@ -30,673 +28,415 @@ struct Ordered {
 }
 
 impl List {
-    fn new2(current: ListItem, list_type: ListType) -> Self {
-        Self { list_type, items: Vec::new(), current, loose: false, gap: false }
+    fn new(current: ListItem, list_type: ListType) -> Self {
+        Self { list_type, items: Vec::new(), current: Some(current), loose: false, gap: false }
     }
 
-    pub fn check_star_dash2(line: SkipIndent) -> StarDashResult {
-        ListItem::check_star_dash2(line).into()
-    }
-
-    pub fn check_plus2(line: SkipIndent) -> NewResult { ListItem::check_plus2(line).into() }
-
-    pub fn check_number2(line: SkipIndent) -> NewResult { ListItem::check_number2(line) }
-
-    fn new_unordered_empty(indent: usize, marker: char) -> Self {
-        Self {
-            list_type: ListType::Unordered(marker),
-            items: Vec::new(),
-            current: ListItem::new_empty(2, indent),
-            loose: false,
-            gap: false,
+    pub(crate) fn check_star_dash(line: SkipIndent) -> ListBreakResult {
+        let c = line.first;
+        match ListItem::check_star_dash(line) {
+            NewItemBreakResult::New(i) =>
+                ListBreakResult::List(Self::new(i, ListType::Unordered(c))),
+            NewItemBreakResult::Break => ListBreakResult::Break(ThematicBreak),
+            NewItemBreakResult::Text(s) => ListBreakResult::Text(s),
         }
     }
 
-    fn new_ordered_empty(indent: usize, width: usize, starting: i32, closing: char) -> Self {
-        Self {
-            list_type: ListType::Ordered(Ordered { starting, closing }),
-            items: Vec::new(),
-            current: ListItem::new_empty(width + 1, indent),
-            loose: false,
-            gap: false,
+    pub(crate) fn check_star_paragraph(line: SkipIndent) -> ListBreakResult {
+        match ListItem::check_star_paragraph(line) {
+            NewItemBreakResult::New(i) =>
+                ListBreakResult::List(Self::new(i, ListType::Unordered('*'))),
+            NewItemBreakResult::Break => ListBreakResult::Break(ThematicBreak),
+            NewItemBreakResult::Text(s) => ListBreakResult::Text(s),
         }
     }
 
-    fn new_unordered(indent: usize, marker: char, spaces: usize, first: &str) -> Self {
-        Self {
-            list_type: ListType::Unordered(marker),
-            items: Vec::new(),
-            current: ListItem::new(1 + spaces, indent, first),
-            loose: false,
-            gap: false,
+    pub(crate) fn check_dash_paragraph(line: SkipIndent) -> ListBreakSetextResult {
+        ListItem::check_dash_paragraph(line)
+    }
+
+    pub(crate) fn check_plus(line: SkipIndent) -> NewResult {
+        match ListItem::check_plus(line) {
+            NewItemResult::New(i) => NewResult::New(Self::new(i, ListType::Unordered('+')).into()),
+            NewItemResult::Text(s) => NewResult::Text(s),
         }
     }
 
-    fn new_ordered(
-        indent: usize, width: usize, starting: i32, closing: char, spaces: usize, first: &str,
-    ) -> Self {
-        Self {
-            list_type: ListType::Ordered(Ordered { starting, closing }),
-            items: Vec::new(),
-            current: ListItem::new(width + spaces, indent, first),
-            loose: false,
-            gap: false,
+    pub(crate) fn check_plus_paragraph(line: SkipIndent) -> NewResult {
+        match ListItem::check_plus_paragraph(line) {
+            NewItemResult::New(i) => NewResult::New(Self::new(i, ListType::Unordered('+')).into()),
+            NewItemResult::Text(s) => NewResult::Text(s),
         }
     }
 
-    fn new_unordered_code(indent: usize, marker: char, rest: &mut Peekable<Chars>) -> Self {
-        Self {
-            list_type: ListType::Unordered(marker),
-            items: Vec::new(),
-            current: ListItem::new_code(2, indent, rest),
-            loose: false,
-            gap: false,
+    pub(crate) fn check_number(line: SkipIndent) -> NewResult {
+        match ListItem::check_number(line) {
+            NewOrderedItemResult::New(i, o) =>
+                NewResult::New(Self::new(i, ListType::Ordered(o)).into()),
+            NewOrderedItemResult::Text(s) => NewResult::Text(s),
         }
     }
 
-    fn new_ordered_code(
-        indent: usize, width: usize, starting: i32, closing: char, rest: &mut Peekable<Chars>,
-    ) -> Self {
-        Self {
-            list_type: ListType::Ordered(Ordered { starting, closing }),
-            items: Vec::new(),
-            current: ListItem::new_code(width + 1, indent, rest),
-            loose: false,
-            gap: false,
+    pub(crate) fn check_number_paragraph(line: SkipIndent) -> NewResult {
+        ListItem::check_number_paragraph(line)
+    }
+
+    pub(crate) fn continuation(&mut self, line: SkipIndent) -> Option<LineResult> {
+        match self.current.as_mut()?.current.as_mut() {
+            TempBlock::Paragraph(p) => Some(p.next_continuation(line)),
+            TempBlock::BlockQuote(b) => b.continuation(line),
+            TempBlock::List(l) => l.continuation(line),
+            _ => None,
         }
     }
 
-    pub fn check_number(
-        first: char, indent: usize, line: &str, rest: &mut Peekable<Chars>,
-    ) -> Option<Self> {
-        let mut width = 1;
-        while matches!(rest.peek(), Some('0'..='9')) {
-            width += 1;
-            if width == 10 {
-                return None;
-            }
-            rest.next();
-        }
-        let closing = rest.next_if(|x| matches!(x, '.' | ')'))?;
-        let starting = line[indent..indent + width].parse().unwrap();
-        let spaces = skip_indent_iter(rest, 5);
-        if spaces == 0 {
-            match rest.next() {
-                Some(_) => None,
-                None => Some(Self::new_ordered_empty(indent, width + 1, starting, closing)),
-            }
-        } else if spaces <= 4 {
-            match rest.next() {
-                Some(_) => Some(Self::new_ordered(
-                    indent,
-                    width + 1,
-                    starting,
-                    closing,
-                    spaces,
-                    &line[indent + width + 1 + spaces..],
-                )),
-                None => Some(Self::new_ordered_empty(indent, width + 1, starting, closing)),
-            }
-        } else {
-            Some(match rest.clone().all(char::is_whitespace) {
-                true => Self::new_ordered_empty(indent, width + 1, starting, closing),
-                false => Self::new_ordered_code(indent, width + 1, starting, closing, rest),
-            })
-        }
+    pub(crate) fn indented_continuation(&mut self, line: SkipIndent) -> bool {
+        let Some(current) = self.current.as_mut() else { return false };
+        current.indented_continuation(line)
     }
 
-    pub fn check_number_paragraph(
-        indent: usize, line: &str, rest: &mut Peekable<Chars>,
-    ) -> Option<Self> {
-        let closing = rest.next_if(|x| matches!(x, '.' | ')'))?;
-        let spaces = skip_indent_iter(rest, 5);
-        if spaces == 0 {
-            None
-        } else if spaces <= 4 {
-            rest.next().map(|_| {
-                Self::new_ordered(indent, 2, 1, closing, spaces, &line[indent + 1 + spaces..])
-            })
-        } else {
-            (!rest.clone().all(char::is_whitespace))
-                .then(|| Self::new_ordered_code(indent, 2, 1, closing, rest))
-        }
-    }
-
-    pub fn check_plus(indent: usize, line: &str, rest: &mut Peekable<Chars>) -> Option<Self> {
-        let spaces = skip_indent_iter(rest, 5);
-        if spaces == 0 {
-            match rest.next() {
-                Some(_) => None,
-                None => Some(Self::new_unordered_empty(indent, '+')),
-            }
-        } else if spaces <= 4 {
-            match rest.next() {
-                Some(_) =>
-                    Some(Self::new_unordered(indent, '+', spaces, &line[indent + 1 + spaces..])),
-                None => Some(Self::new_unordered_empty(indent, '+')),
-            }
-        } else {
-            match rest.clone().all(char::is_whitespace) {
-                true => Some(Self::new_unordered_empty(indent, '+')),
-                false => Some(Self::new_unordered_code(indent, '+', rest)),
-            }
-        }
-    }
-
-    pub fn check_other(
-        first: char, indent: usize, line: &str, rest: &mut Peekable<Chars>,
-    ) -> ListResult {
-        let spaces = skip_indent_iter(rest, 5);
-        if spaces == 0 {
-            match rest.next() {
-                Some(c) => match c == first && Self::check_thematic(first, rest) {
-                    true => ListResult::Break(ThematicBreak),
-                    false => ListResult::None,
-                },
-                None => ListResult::List(Self::new_unordered_empty(indent, first)),
-            }
-        } else if spaces <= 4 {
-            match rest.next() {
-                Some(c) => match c == first && Self::check_thematic(first, rest) {
-                    true => ListResult::Break(ThematicBreak),
-                    false => ListResult::List(Self::new_unordered(
-                        indent,
-                        first,
-                        spaces,
-                        &line[indent + 1 + spaces..],
-                    )),
-                },
-                None => ListResult::List(Self::new_unordered_empty(indent, first)),
-            }
-        } else {
-            let mut third = false;
-            for c in rest.clone() {
-                third = false;
-                match c {
-                    ' ' | '\t' => continue,
-                    c if c == first => third = true,
-                    _ => return ListResult::List(Self::new_unordered_code(indent, first, rest)),
+    pub(crate) fn next(&mut self, line: SkipIndentResult) -> LineResult {
+        match line {
+            SkipIndentResult::Line(mut line) => {
+                if let Some(current) = self.current.as_mut()
+                    && line.indent >= current.indent + current.width
+                {
+                    line.move_indent(current.indent + current.width);
+                    current.next(line);
+                    LineResult::None
+                } else if line.indent > 3 {
+                    match self.indented_continuation(line.clone()) {
+                        true => LineResult::None,
+                        false =>
+                            IndentedCodeBlock::new(line).done_self_and_new(),
+                        
+                    }
+                } else {
+                    let line = match self.check_matching(line) {
+                        CheckMatchingResult::LineResult(r) => return r,
+                        CheckMatchingResult::Text(s) => s,
+                    };
+                    match self.continuation(line.clone()) {
+                        Some(r) => {
+                            return r;
+                        },
+                        None => {},
+                    }
+                    match line.first {
+                        '~' | '`' => match FencedCodeBlock::check(line) {
+                            NewResult::New(b) => LineResult::DoneSelfAndNew(b),
+                            NewResult::Text(s) => Paragraph::new(s).done_self_and_new(),
+                        },
+                        '*' | '-' => match List::check_star_dash(line) {
+                            ListBreakResult::List(l) => l.done_self_and_new(),
+                            ListBreakResult::Break(b) => b.done_self_and_other(),
+                            ListBreakResult::Text(s) => Paragraph::new(s).done_self_and_new(),
+                        },
+                        '_' => match ThematicBreak::check(line) {
+                            DoneResult::Done(b) => LineResult::DoneSelfAndOther(b),
+                            DoneResult::Text(s) => Paragraph::new(s).done_self_and_new(),
+                        },
+                        '+' => match List::check_plus(line) {
+                            NewResult::New(l) => LineResult::DoneSelfAndNew(l),
+                            NewResult::Text(s) => Paragraph::new(s).done_self_and_new(),
+                        },
+                        '#' => match AtxHeading::check(line) {
+                            DoneResult::Done(b) => LineResult::DoneSelfAndOther(b),
+                            DoneResult::Text(s) => Paragraph::new(s).done_self_and_new(),
+                        },
+                        '>' => BlockQuote::new(line).done_self_and_new(),
+                        '0'..='9' => match List::check_number(line) {
+                            NewResult::New(b) => LineResult::DoneSelfAndNew(b),
+                            NewResult::Text(s) => Paragraph::new(s).done_self_and_new(),
+                        },
+                        _ => Paragraph::new(line).done_self_and_new(),
+                    }
                 }
-            }
-            match third {
-                true => ListResult::Break(ThematicBreak),
-                false => ListResult::List(Self::new_unordered_empty(indent, first)),
-            }
+            },
+            SkipIndentResult::Blank(indent) => self.next_blank(indent),
         }
     }
 
-    pub fn check_plus_non_empty(
-        indent: usize, line: &str, rest: &mut Peekable<Chars>,
-    ) -> Option<Self> {
-        let spaces = skip_indent_iter(rest, 5);
-        if spaces == 0 {
-            None
-        } else if spaces <= 4 {
-            rest.next()
-                .map(|_| Self::new_unordered(indent, '+', spaces, &line[indent + 1 + spaces..]))
-        } else {
-            (!rest.clone().all(char::is_whitespace))
-                .then(|| Self::new_unordered_code(indent, '+', rest))
-        }
-    }
-
-    pub fn check_star_non_empty(
-        indent: usize, line: &str, rest: &mut Peekable<Chars>,
-    ) -> ListResult {
-        let spaces = skip_indent_iter(rest, 5);
-        if spaces == 0 {
-            match rest.next() {
-                Some(c) => match c == '*' && Self::check_thematic('*', rest) {
-                    true => ListResult::Break(ThematicBreak),
-                    false => ListResult::None,
-                },
-                None => ListResult::None,
-            }
-        } else if spaces <= 4 {
-            match rest.next() {
-                Some(c) => match c == '*' && Self::check_thematic('*', rest) {
-                    true => ListResult::Break(ThematicBreak),
-                    false => ListResult::List(Self::new_unordered(
-                        indent,
-                        '*',
-                        spaces,
-                        &line[indent + 1 + spaces..],
-                    )),
-                },
-                None => ListResult::None,
-            }
-        } else {
-            let mut third = false;
-            for c in rest.clone() {
-                third = false;
-                match c {
-                    ' ' | '\t' => continue,
-                    '*' => third = true,
-                    _ => return ListResult::List(Self::new_unordered_code(indent, '*', rest)),
-                }
-            }
-            match third {
-                true => ListResult::Break(ThematicBreak),
-                false => ListResult::None,
-            }
-        }
-    }
-
-    pub fn check_dash_paragraph(
-        indent: usize, line: &str, rest: &mut Peekable<Chars>,
-    ) -> ParagraphListResult {
-        let spaces = skip_indent_iter(rest, 5);
-        if spaces == 0 {
-            match rest.next() {
-                Some('-') => Self::check_thematic_setext(rest),
-                Some(_) | None => ParagraphListResult::None,
-            }
-        } else if spaces <= 4 {
-            match rest.next() {
-                Some(c) => match c == '-' && Self::check_thematic('-', rest) {
-                    true => ParagraphListResult::Break(ThematicBreak),
-                    false => ParagraphListResult::List(Self::new_unordered(
-                        indent,
-                        '-',
-                        spaces,
-                        &line[indent + 1 + spaces..],
-                    )),
-                },
-                None => ParagraphListResult::None,
-            }
-        } else {
-            let mut third = false;
-            for c in rest.clone() {
-                third = false;
-                match c {
-                    ' ' | '\t' => continue,
-                    '-' => third = true,
-                    _ =>
-                        return ParagraphListResult::List(Self::new_unordered_code(
-                            indent, '-', rest,
-                        )),
-                }
-            }
-            match third {
-                true => ParagraphListResult::Break(ThematicBreak),
-                false => ParagraphListResult::None,
-            }
-        }
-    }
-
-    const fn matches_type(&self, c: char) -> bool {
-        match self.list_type {
-            ListType::Unordered(m) => m == c,
-            ListType::Ordered(_) => c.is_ascii_digit(),
-        }
-    }
-
-    const fn matches_closing(&self, other: &Self) -> bool {
-        let ListType::Ordered(Ordered { closing: a, .. }) = self.list_type else { return false };
-        let ListType::Ordered(Ordered { closing: b, .. }) = other.list_type else { return false };
-        a == b
-    }
-
-    fn update_self(&mut self, new: Self) {
-        let old = std::mem::replace(&mut self.current, new.current);
-        if self.gap
-            || old.done
-            || matches!(old.current.as_ref(), TempBlock::List(Self { gap: true, loose: false, .. }))
-        {
+    fn check_end(&mut self) {
+        if self.current.as_ref().is_some_and(|i| i.loose) {
             self.loose = true;
         }
-        self.items.push(old);
     }
 
-    #[allow(clippy::too_many_lines)]
-    pub fn next(&mut self, line: &str) -> LineResult {
-        let total = self.current.indent + self.current.width;
-        let (indent, mut iter) = skip_indent(line, total);
-        if indent >= total && !self.current.done {
-            let result = self.current.current.next_no_apply(&line[total..]);
-            match &result {
-                LineResult::DoneSelf =>
-                    if iter.all(char::is_whitespace) {
-                        self.gap = true;
-                    },
-                LineResult::New(_) | LineResult::Done(_) if self.gap => self.loose = true,
-                LineResult::DoneSelfAndNew(_) | LineResult::DoneSelfAndOther(_) => {
-                    if matches!(
-                        self.current.current.as_ref(),
-                        TempBlock::List(Self { gap: true, loose: false, .. })
-                    ) {
-                        self.loose = true;
-                    }
-                },
-                _ =>
-                    if iter.all(char::is_whitespace) && self.current.check_empty() {
-                        self.current.done = true;
-                    },
-            }
-            self.current.current.apply_result(result, &mut self.current.finished);
-            LineResult::None
-        } else if indent >= 4 {
-            let empty = iter.clone().all(char::is_whitespace);
-            if empty {
-                if self.current.check_empty() {
-                    self.current.done = true;
-                } else {
-                    self.gap = true;
+    fn add_item(&mut self, new: ListItem) {
+        match self.current.replace(new) {
+            Some(old) => {
+                if self.gap || old.makes_loose() {
+                    self.loose = true;
                 }
-                LineResult::None
-            } else {
-                match !self.current.done && self.over_indented_continuation(line) {
-                    true => LineResult::None,
-                    false =>
-                        IndentedCodeBlock::new(&mut skip_indent(line, 4).1).done_self_and_new(),
-                }
-            }
-            // match self.over_indented_continuation(line) {
-            //     true => {
-            //         if iter.clone().all(char::is_whitespace) {
-            //             self.gap = true;
-            //         }
-            //         LineResult::None
-            //     },
-            //     false => IndentedCodeBlock::new(&mut skip_indent(line, 4).1).done_self_and_new(),
-            // }
-        } else {
-            match iter.next() {
-                Some('+') if self.matches_type('+') =>
-                    match Self::check_plus(indent, line, &mut iter) {
-                        Some(b) => {
-                            self.update_self(b);
-                            LineResult::None
-                        },
-                        None => Paragraph::new(line).done_self_and_new(),
-                    },
-                Some(c @ ('*' | '-')) if self.matches_type(c) =>
-                    match Self::check_other(c, indent, line, &mut iter) {
-                        ListResult::List(b) => {
-                            self.update_self(b);
-                            LineResult::None
-                        },
-                        ListResult::Break(b) => b.done_self_and_other(),
-                        ListResult::None => Paragraph::new(line).done_self_and_new(),
-                    },
-                Some(c @ '0'..='9') if self.matches_type(c) =>
-                    match Self::check_number(c, indent, line, &mut iter) {
-                        Some(l) =>
-                            if self.matches_closing(&l) {
-                                let old = std::mem::replace(&mut self.current, l.current);
-                                self.items.push(old);
-                                if self.gap {
-                                    self.loose = true;
-                                }
-                                LineResult::None
-                            } else {
-                                l.done_self_and_new()
-                            },
-                        None => Paragraph::new(line).done_self_and_new(),
-                    },
-                // f if let Some(r) = self.continuation(indent, f, line, &mut iter.clone()) => match
-                // r {
-                // LineResult::DoneSelf => {
-                //     self.current
-                //         .current
-                //         .apply_result(LineResult::DoneSelf, &mut self.current.finished);
-                //     self.gap = true;
-                //     LineResult::None
-                // },
-                // r => r,
-                // },
-                Some(f)
-                    if let Some(r) =
-                        self.continuation(indent, Some(f), line, &mut iter.clone()) =>
-                    r,
-                Some(c @ ('~' | '`')) => match FencedCodeBlock::check(indent, c, &mut iter) {
-                    Some(b) => b.done_self_and_new(),
-                    None => Paragraph::new(line).done_self_and_new(),
+                self.items.push(old);
+            },
+            None =>
+                if self.gap {
+                    self.loose = true;
                 },
-                Some(c @ ('*' | '-')) => match List::check_other(c, indent, line, &mut iter) {
-                    ListResult::List(b) => b.done_self_and_new(),
-                    ListResult::Break(b) => b.done_self_and_other(),
-                    ListResult::None => Paragraph::new(line).done_self_and_new(),
-                },
-                Some('_') => match ThematicBreak::check('_', &mut iter) {
-                    Some(b) => b.done_self_and_other(),
-                    None => Paragraph::new(line).done_self_and_new(),
-                },
-                Some('+') => match List::check_plus(indent, line, &mut iter) {
-                    Some(l) => l.done_self_and_new(),
-                    None => Paragraph::new(line).done_self_and_new(),
-                },
-                Some('#') => match AtxHeading::check(&mut iter) {
-                    Some(b) => b.done_self_and_other(),
-                    None => Paragraph::new(line).done_self_and_new(),
-                },
-                Some(c @ '0'..='9') => match List::check_number(c, indent, line, &mut iter) {
-                    Some(b) => b.done_self_and_new(),
-                    None => Paragraph::new(line).done_self_and_new(),
-                },
-                Some(_) => LineResult::DoneSelfAndNew(TempBlock::Paragraph(Paragraph::new(line))),
-                // _ if !iter.all(char::is_whitespace) =>
-                //     LineResult::DoneSelfAndNew(TempBlock::Paragraph(Paragraph::new(line))),
-                _ => {
-                    if self.current.check_empty() {
-                        self.current.done = true;
-                    }
-                    self.next_blank()
-                },
-            }
         }
     }
 
-    pub fn next_blank(&mut self) -> LineResult {
-        let result = self.current.current.next_blank();
-        if matches!(result, LineResult::DoneSelf)
-            || matches!(self.current.current.as_ref(), TempBlock::Empty)
-        {
+    fn check_matching<'a>(&mut self, line: SkipIndent<'a>) -> CheckMatchingResult<'a> {
+        match &self.list_type {
+            ListType::Unordered('+') => match line.first {
+                '+' => match ListItem::check_plus(line) {
+                    NewItemResult::New(i) => {
+                        self.add_item(i);
+                        CheckMatchingResult::LineResult(LineResult::None)
+                    },
+                    NewItemResult::Text(s) => CheckMatchingResult::Text(s),
+                },
+                _ => CheckMatchingResult::Text(line),
+            },
+            ListType::Unordered(c) =>
+                if line.first == *c {
+                    match ListItem::check_star_dash(line) {
+                        NewItemBreakResult::New(i) => {
+                            self.add_item(i);
+                            CheckMatchingResult::LineResult(LineResult::None)
+                        },
+                        NewItemBreakResult::Break =>
+                            CheckMatchingResult::LineResult(ThematicBreak.done_self_and_other()),
+                        
+                        NewItemBreakResult::Text(s) => CheckMatchingResult::Text(s),
+                    }
+                } else {
+                    CheckMatchingResult::Text(line)
+                },
+            ListType::Ordered(Ordered { closing, .. }) => match line.first {
+                '0'..='9' => match ListItem::check_number(line) {
+                    NewOrderedItemResult::New(i, o) =>
+                        if o.closing == *closing {
+                            self.add_item(i);
+                            CheckMatchingResult::LineResult(LineResult::None)
+                        } else {
+                            CheckMatchingResult::LineResult(
+                                Self::new(i, ListType::Ordered(o)).done_self_and_new(),
+                            )
+                        },
+                    NewOrderedItemResult::Text(s) => CheckMatchingResult::Text(s),
+                },
+                _ => CheckMatchingResult::Text(line),
+            },
+        }
+    }
+
+    fn next_blank(&mut self, indent: usize) -> LineResult {
+        let Some(current) = self.current.as_mut() else { return LineResult::None };
+        if current.check_empty(indent) {
+            self.items.push(self.current.take().unwrap());
             self.gap = true;
         }
-        self.current.current.apply_result(result, &mut self.current.finished);
         LineResult::None
     }
 
-    pub fn finish(self) -> Block {
-        let done = self
-            .items
-            .into_iter()
-            .chain(iter::once(self.current))
-            .map(|i| i.finish(self.loose))
-            .collect();
+    pub(crate) fn finish(mut self) -> Block {
+        self.check_end();
+        let done =
+            self.items.into_iter().chain(self.current).map(|i| i.finish(self.loose)).collect();
         match self.list_type {
             ListType::Unordered(_) => Block::BulletList(done),
             ListType::Ordered(Ordered { starting, closing }) =>
                 Block::OrderedList(new_list_attributes(starting, closing), done),
         }
     }
+}
 
-    fn check_thematic(first: char, rest: &mut Peekable<Chars>) -> bool {
-        let mut third = false;
-        for c in rest {
-            match c {
-                ' ' | '\t' => continue,
-                c if c == first => third = true,
-                _ => return false,
-            }
-        }
-        third
-    }
-
-    fn check_thematic_setext(rest: &mut Peekable<Chars>) -> ParagraphListResult {
-        let mut space = false;
-        let mut gap = false;
-        for c in rest {
-            match c {
-                ' ' | '\t' => space = true,
-                '-' =>
-                    if space {
-                        gap = true
-                    },
-                _ => return ParagraphListResult::None,
-            }
-        }
-        match gap {
-            true => ParagraphListResult::Break(ThematicBreak),
-            false => ParagraphListResult::Setext,
-        }
-    }
-
-    pub fn continuation(
-        &mut self, indent: usize, first: Option<char>, line: &str, rest: &mut Peekable<Chars>,
-    ) -> Option<LineResult> {
-        // if first.is_none() && rest.clone().all(char::is_whitespace) {
-        //     return None
-        // }
-        self.current.current.continuation(indent, first, line, rest)
-    }
-
-    pub fn over_indented_continuation(&mut self, line: &str) -> bool {
-        self.current.current.over_indented_continuation(line)
-    }
+enum CheckMatchingResult<'a> {
+    LineResult(LineResult),
+    Text(SkipIndent<'a>),
 }
 
 #[derive(Debug)]
 struct ListItem {
     finished: Vec<TempBlock>,
     current: Box<TempBlock>,
-    done: bool,
     width: usize,
     indent: usize,
+    gap: bool,
+    loose: bool,
 }
 
-pub enum StarDashResult<'a> {
+pub(crate) enum ListBreakResult<'a> {
     List(List),
     Break(ThematicBreak),
     Text(SkipIndent<'a>),
 }
 
-enum StarDashItemResult<'a> {
-    Item(ListItem, char),
+pub(crate) enum ListBreakSetextResult<'a> {
+    List(List),
     Break(ThematicBreak),
     Text(SkipIndent<'a>),
+    Setext,
 }
 
-impl<'a> From<StarDashItemResult<'a>> for StarDashResult<'a> {
-    fn from(value: StarDashItemResult<'a>) -> Self {
-        match value {
-            StarDashItemResult::Item(l, c) => Self::List(List::new2(l, ListType::Unordered(c))),
-            StarDashItemResult::Break(b) => Self::Break(b),
-            StarDashItemResult::Text(s) => Self::Text(s),
-        }
-    }
-}
-
-enum PlusResult<'a> {
+enum NewItemResult<'a> {
     New(ListItem),
     Text(SkipIndent<'a>),
 }
 
-impl<'a> From<PlusResult<'a>> for NewResult<'a> {
-    fn from(value: PlusResult<'a>) -> Self {
+enum NewItemBreakResult<'a> {
+    New(ListItem),
+    Break,
+    Text(SkipIndent<'a>),
+}
+
+enum NewOrderedItemResult<'a> {
+    New(ListItem, Ordered),
+    Text(SkipIndent<'a>),
+}
+
+impl<'a> From<NewItemResult<'a>> for NewItemBreakResult<'a> {
+    fn from(value: NewItemResult<'a>) -> Self {
         match value {
-            PlusResult::New(l) => Self::New(List::new2(l, ListType::Unordered('+')).into()),
-            PlusResult::Text(s) => Self::Text(s),
+            NewItemResult::New(i) => NewItemBreakResult::New(i),
+            NewItemResult::Text(s) => NewItemBreakResult::Text(s),
         }
     }
 }
 
 impl ListItem {
-    fn new_empty2(width: usize, indent: usize) -> Self {
+    fn new_empty(width: usize, indent: usize) -> Self {
         Self {
             finished: Vec::new(),
             current: Box::new(TempBlock::Empty),
-            done: false,
             width,
             indent,
+            gap: false,
+            loose: false,
         }
     }
 
-    fn new2(width: usize, indent: usize, content: SkipIndent) -> Self {
+    fn new(width: usize, indent: usize, content: SkipIndent) -> Self {
         let mut current = TempBlock::Empty;
         let mut finished = Vec::new();
         current.apply_result(TempBlock::next_empty_known_indent(content), &mut finished);
-        Self { finished, current: Box::new(current), done: false, width, indent }
+        Self { finished, current: Box::new(current), width, indent, gap: false, loose: false }
     }
 
-    fn new_code2(width: usize, indent: usize, mut content: SkipIndent) -> Self {
+    fn new_code(width: usize, indent: usize, mut content: SkipIndent) -> Self {
         content.move_indent(1);
         Self {
             finished: Vec::new(),
-            current: Box::new(IndentedCodeBlock::new2(content).into()),
-            done: false,
+            current: Box::new(IndentedCodeBlock::new(content).into()),
             width,
             indent,
+            gap: false,
+            loose: false,
         }
     }
 
-    fn check_star_dash2(line: SkipIndent) -> StarDashItemResult {
+    fn check_star_dash(line: SkipIndent) -> NewItemBreakResult {
         match line.skip_indent_rest() {
-            Some(rest) => {
-                if Self::check_thematic2(&line, &rest) {
-                    return StarDashItemResult::Break(ThematicBreak);
-                }
-                match rest.indent {
-                    0 => StarDashItemResult::Text(line),
-                    i @ 1..=4 =>
-                        StarDashItemResult::Item(Self::new2(1 + i, line.indent, rest), line.first),
-                    5.. =>
-                        StarDashItemResult::Item(Self::new_code2(2, line.indent, rest), line.first),
-                }
-            },
-            None => StarDashItemResult::Item(Self::new_empty2(2, line.indent), line.first),
+            SkipIndentResult::Line(rest) => Self::check_star_dash_known(line, rest),
+            SkipIndentResult::Blank(_) => NewItemBreakResult::New(Self::new_empty(2, line.indent)),
         }
     }
 
-    pub fn check_plus2(line: SkipIndent) -> PlusResult {
+    fn check_star_paragraph(line: SkipIndent) -> NewItemBreakResult {
         match line.skip_indent_rest() {
-            Some(rest) => match rest.indent {
-                0 => PlusResult::Text(line),
-                i @ 1..=4 => PlusResult::New(Self::new2(1 + i, line.indent, rest)),
-                5.. => PlusResult::New(Self::new_code2(2, line.indent, rest)),
-            },
-            None => PlusResult::New(Self::new_empty2(2, line.indent)),
+            SkipIndentResult::Line(rest) => Self::check_star_dash_known(line, rest),
+            SkipIndentResult::Blank(_) => NewItemBreakResult::Text(line),
         }
     }
 
-    pub fn check_number2(line: SkipIndent) -> NewResult {
+    fn check_star_dash_known<'a>(
+        line: SkipIndent<'a>, rest: SkipIndent<'a>,
+    ) -> NewItemBreakResult<'a> {
+        match Self::check_thematic(&line, &rest) {
+            true => NewItemBreakResult::Break,
+            false => Self::check_unordered_known(line, rest).into(),
+        }
+    }
+
+    fn check_dash_paragraph(line: SkipIndent) -> ListBreakSetextResult {
+        match line.skip_indent_rest() {
+            SkipIndentResult::Line(rest) =>
+                if rest.indent == 0 {
+                    Self::check_thematic_setext(line, rest)
+                } else if Self::check_thematic(&line, &rest) {
+                    ListBreakSetextResult::Break(ThematicBreak)
+                } else {
+                    let item = if rest.indent < 5 {
+                        Self::new(1 + rest.indent, line.indent, rest)
+                    } else {
+                        Self::new_code(2, line.indent, rest)
+                    };
+                    ListBreakSetextResult::List(List::new(item, ListType::Unordered('-')))
+                },
+            SkipIndentResult::Blank(_) => ListBreakSetextResult::Setext,
+        }
+    }
+
+    fn check_plus(line: SkipIndent) -> NewItemResult {
+        match line.skip_indent_rest() {
+            SkipIndentResult::Line(rest) => Self::check_unordered_known(line, rest),
+            SkipIndentResult::Blank(_) => NewItemResult::New(Self::new_empty(2, line.indent)),
+        }
+    }
+
+    fn check_plus_paragraph(line: SkipIndent) -> NewItemResult {
+        match line.skip_indent_rest() {
+            SkipIndentResult::Line(rest) => Self::check_unordered_known(line, rest),
+            SkipIndentResult::Blank(_) => NewItemResult::Text(line),
+        }
+    }
+
+    fn check_unordered_known<'a>(line: SkipIndent<'a>, rest: SkipIndent<'a>) -> NewItemResult<'a> {
+        match rest.indent {
+            0 => NewItemResult::Text(line),
+            i @ 1..=4 => NewItemResult::New(Self::new(1 + i, line.indent, rest)),
+            5.. => NewItemResult::New(Self::new_code(2, line.indent, rest)),
+        }
+    }
+
+    fn check_number(line: SkipIndent) -> NewOrderedItemResult {
         let mut iter = line.indent_iter_rest();
-        let Some((starting, width)) = iter.get_number(line.first) else {
-            return NewResult::Text(line);
+        let (Some((starting, width)), Some(closing)) =
+            (iter.get_number(line.first), iter.get_closing())
+        else {
+            return NewOrderedItemResult::Text(line);
         };
+        let list_type = Ordered { starting: starting as _, closing };
+        match iter.skip_indent() {
+            SkipIndentResult::Line(rest) => match rest.indent {
+                0 => NewOrderedItemResult::Text(line),
+                i @ 1..=4 => NewOrderedItemResult::New(
+                    Self::new(width + 1 + i, line.indent, rest),
+                    list_type,
+                ),
+                5.. => NewOrderedItemResult::New(
+                    Self::new_code(width + 2, line.indent, rest),
+                    list_type,
+                ),
+            },
+            SkipIndentResult::Blank(_) =>
+                NewOrderedItemResult::New(Self::new_empty(width + 2, line.indent), list_type),
+        }
+    }
+
+    fn check_number_paragraph(line: SkipIndent) -> NewResult {
+        let mut iter = line.indent_iter_rest();
         let Some(closing) = iter.get_closing() else {
             return NewResult::Text(line);
         };
+        let list_type = ListType::Ordered(Ordered { starting: 1, closing });
         match iter.skip_indent() {
-            Some(rest) => match rest.indent {
+            SkipIndentResult::Line(rest) => match rest.indent {
                 0 => NewResult::Text(line),
-                i @ 1..=4 => NewResult::New(
-                    List::new2(
-                        Self::new2(width + 1 + i, line.indent, rest),
-                        ListType::Ordered(Ordered { starting: starting as _, closing }),
-                    )
-                    .into(),
-                ),
+                i @ 1..=4 =>
+                    NewResult::New(List::new(Self::new(2 + i, line.indent, rest), list_type).into()),
                 5.. => NewResult::New(
-                    List::new2(
-                        Self::new_code2(width + 2, line.indent, rest),
-                        ListType::Ordered(Ordered { starting: starting as _, closing }),
-                    )
-                    .into(),
+                    List::new(Self::new_code(3, line.indent, rest), list_type).into(),
                 ),
             },
-            None => NewResult::New(
-                List::new2(
-                    Self::new_empty2(width + 2, line.indent),
-                    ListType::Ordered(Ordered { starting: starting as _, closing }),
-                )
-                .into(),
-            ),
+            SkipIndentResult::Blank(_) => NewResult::Text(line),
         }
     }
 
-    fn check_thematic2(line: &SkipIndent, rest: &SkipIndent) -> bool {
+    fn check_thematic(line: &SkipIndent, rest: &SkipIndent) -> bool {
         if line.first != rest.first {
             return false;
         }
@@ -711,36 +451,85 @@ impl ListItem {
         third
     }
 
-    fn new_empty(width: usize, indent: usize) -> Self {
-        Self {
-            finished: Vec::new(),
-            current: Box::new(TempBlock::default()),
-            width,
-            indent,
-            done: false,
+    fn check_empty(&mut self, indent: usize) -> bool {
+        let result = match self.current.as_mut() {
+            TempBlock::Empty =>
+                return if self.finished.is_empty() {
+                    true
+                } else {
+                    self.gap = true;
+                    false
+                },
+            TempBlock::Paragraph(p) => {
+                self.gap = true;
+                p.next_blank()
+            },
+            TempBlock::IndentedCodeBlock(i) => i.next_blank(indent),
+            TempBlock::FencedCodeBlock(f) => f.next_blank(indent),
+            TempBlock::Table(t) => {
+                self.gap = true;
+                t.next_blank()
+            },
+            TempBlock::BlockQuote(b) => {
+                self.gap = true;
+                b.next_blank()
+            },
+            TempBlock::List(l) => l.next_blank(indent),
+            _ => unreachable!(),
+        };
+        self.current.apply_result(result, &mut self.finished);
+        false
+    }
+
+    fn check_thematic_setext<'a>(
+        line: SkipIndent<'a>, rest: SkipIndent,
+    ) -> ListBreakSetextResult<'a> {
+        let mut space = false;
+        let mut thematic = false;
+        for c in rest.line.chars() {
+            match c {
+                ' ' | '\t' => space = true,
+                '-' =>
+                    if space {
+                        thematic = true;
+                    },
+                _ => return ListBreakSetextResult::Text(line),
+            }
+        }
+        match thematic {
+            true => ListBreakSetextResult::Break(ThematicBreak),
+            false => ListBreakSetextResult::Setext,
         }
     }
 
-    fn new(width: usize, indent: usize, first: &str) -> Self {
-        let mut result = Self::new_empty(width, indent);
-        result.current.next(first, &mut result.finished);
-        result
+    fn next(&mut self, line: SkipIndent) {
+        let result = self.current.next_no_apply(SkipIndentResult::Line(line));
+        if self.gap && matches!(result, LineResult::New(_) | LineResult::Done(_)) {
+            self.loose = true;
+        }
+        self.current.apply_result(result, &mut self.finished);
     }
 
-    fn new_code(width: usize, indent: usize, rest: &mut Peekable<Chars>) -> Self {
-        Self {
-            finished: Vec::new(),
-            current: Box::new(IndentedCodeBlock::new(rest).into()),
-            done: false,
-            width,
-            indent,
+    fn indented_continuation(&mut self, line: SkipIndent) -> bool {
+        match self.current.as_mut() {
+            TempBlock::Paragraph(p) => {
+                p.next_indented_continuation(line);
+                true
+            },
+            TempBlock::BlockQuote(b) => b.indented_continuation(line),
+            TempBlock::List(l) => l.indented_continuation(line),
+            _ => false,
         }
     }
 
-    fn check_empty(&self) -> bool {
-        self.finished.is_empty() && matches!(self.current.as_ref(), TempBlock::Empty)
+    fn makes_loose(&self) -> bool {
+        if self.gap || self.loose { return true; }
+        let TempBlock::List(l) = self.current.as_ref() else { return false };
+        if l.gap && !l.loose { return true; }
+        let Some(last) = l.current.as_ref().or_else(|| l.items.last()) else { return false };
+        last.gap && !last.loose
     }
-
+    
     fn finish(self, loose: bool) -> Vec<Block> {
         let temp = self
             .finished
@@ -758,41 +547,3 @@ impl ListItem {
         }
     }
 }
-
-pub enum ListResult {
-    List(List),
-    Break(ThematicBreak),
-    None,
-}
-
-pub enum ParagraphListResult {
-    List(List),
-    Break(ThematicBreak),
-    Setext,
-    None,
-}
-
-// trait ToListLineResult {
-// fn new(self, loose: bool) -> ListLineResult;
-// fn done(self, loose: bool) -> ListLineResult;
-// fn done_self_and_new(self, loose: bool) -> ListLineResult;
-// fn done_self_and_other(self, loose: bool) -> ListLineResult;
-// }
-//
-// impl<T> ToListLineResult for T where T : ToLineResult {
-// fn new(self, loose: bool) -> ListLineResult {
-// ListLineResult { line_result: self.new(), loose }
-// }
-//
-// fn done(self, loose: bool) -> ListLineResult {
-// ListLineResult { line_result: self.done(), loose }
-// }
-//
-// fn done_self_and_new(self, loose: bool) -> ListLineResult {
-// ListLineResult { line_result: self.done_self_and_new(), loose }
-// }
-//
-// fn done_self_and_other(self, loose: bool) -> ListLineResult {
-// ListLineResult { line_result: self.done_self_and_other(), loose }
-// }
-// }

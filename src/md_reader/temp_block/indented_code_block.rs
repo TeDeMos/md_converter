@@ -1,68 +1,74 @@
-use std::iter::Peekable;
-use std::str::Chars;
-
-use super::{skip_indent, AtxHeading, BlockQuote, FencedCodeBlock, LineResult, List, ListResult, Paragraph, ThematicBreak, ToLineResult, SkipIndent};
 use crate::ast::{attr_empty, Block};
+use crate::md_reader::temp_block::list::ListBreakResult;
+
+use super::{
+    AtxHeading, BlockQuote, DoneResult, FencedCodeBlock, LineResult, List,
+    NewResult, Paragraph, SkipIndent, SkipIndentResult, ThematicBreak, ToLineResult,
+};
 
 #[derive(Debug)]
-pub struct IndentedCodeBlock(Vec<String>);
+pub(crate) struct IndentedCodeBlock(Vec<String>);
 
 impl IndentedCodeBlock {
-    pub fn new2(mut line: SkipIndent) -> Self {
+    pub(crate) fn new(mut line: SkipIndent) -> Self {
         line.move_indent(4);
         Self(vec![line.get_full()])
     }
-    
-    pub fn new(rest: &mut Peekable<Chars>) -> Self { Self(vec![rest.collect()]) }
 
-    pub fn next(&mut self, line: &str) -> LineResult {
-        let (indent, mut iter) = skip_indent(line, 4);
-        if indent >= 4 {
-            self.0.push(iter.collect());
-            LineResult::None
-        } else {
-            match iter.next() {
-                Some(c @ ('~' | '`')) => match FencedCodeBlock::check(indent, c, &mut iter) {
-                    Some(b) => b.done_self_and_new(),
-                    None => Paragraph::new(line).done_self_and_new(),
+    pub(crate) fn next(&mut self, line: SkipIndentResult) -> LineResult {
+        match line {
+            SkipIndentResult::Line(line) => match line.indent {
+                0..=3 => match line.first {
+                    '~' | '`' => match FencedCodeBlock::check(line) {
+                        NewResult::New(b) => LineResult::DoneSelfAndNew(b),
+                        NewResult::Text(s) => Paragraph::new(s).done_self_and_new(),
+                    },
+                    '*' | '-' => match List::check_star_dash(line) {
+                        ListBreakResult::List(l) => l.done_self_and_new(),
+                        ListBreakResult::Break(b) => b.done_self_and_other(),
+                        ListBreakResult::Text(s) => Paragraph::new(s).done_self_and_new(),
+                    },
+                    '_' => match ThematicBreak::check(line) {
+                        DoneResult::Done(b) => LineResult::DoneSelfAndOther(b),
+                        DoneResult::Text(s) => Paragraph::new(s).done_self_and_new(),
+                    },
+                    '+' => match List::check_plus(line) {
+                        NewResult::New(l) => LineResult::DoneSelfAndNew(l),
+                        NewResult::Text(s) => Paragraph::new(s).done_self_and_new(),
+                    },
+                    '#' => match AtxHeading::check(line) {
+                        DoneResult::Done(b) => LineResult::DoneSelfAndOther(b),
+                        DoneResult::Text(s) => Paragraph::new(s).done_self_and_new(),
+                    },
+                    '>' => BlockQuote::new(line).done_self_and_new(),
+                    '0'..='9' => match List::check_number(line) {
+                        NewResult::New(b) => LineResult::DoneSelfAndNew(b),
+                        NewResult::Text(s) => Paragraph::new(s).done_self_and_new(),
+                    },
+                    _ => Paragraph::new(line).done_self_and_new(),
                 },
-                Some(c @ ('*' | '-')) => match List::check_other(c, indent, line, &mut iter) {
-                    ListResult::List(b) => b.done_self_and_new(),
-                    ListResult::Break(b) => b.done_self_and_other(),
-                    ListResult::None => Paragraph::new(line).new(),
-                },
-                Some('_') => match ThematicBreak::check('_', &mut iter) {
-                    Some(b) => b.done_self_and_other(),
-                    None => Paragraph::new(line).done_self_and_new(),
-                },
-                Some('+') => match List::check_plus(indent, line, &mut iter) {
-                    Some(b) => b.done_self_and_new(),
-                    None => Paragraph::new(line).done_self_and_new(),
-                },
-                Some('#') => match AtxHeading::check(&mut iter) {
-                    Some(b) => b.done_self_and_other(),
-                    None => Paragraph::new(line).done_self_and_new(),
-                },
-                Some('>') => BlockQuote::new(indent, line, &mut iter).done_self_and_new(),
-                Some(c @ '0'..='9') => match List::check_number(c, indent, line, &mut iter) {
-                    Some(b) => b.done_self_and_new(),
-                    None => Paragraph::new(line).done_self_and_new(),
-                },
-                Some(_) => Paragraph::new(line).done_self_and_new(),
-                _ => {
-                    self.0.push(iter.collect());
+                4.. => {
+                    self.push(line);
                     LineResult::None
                 },
-            }
+            },
+            SkipIndentResult::Blank(indent) => self.next_blank(indent),
         }
     }
-
-    pub fn next_blank(&mut self) -> LineResult {
-        self.0.push(String::new());
+    
+    pub(crate) fn next_blank(&mut self, indent: usize) -> LineResult {
+        self.push_empty(indent);
         LineResult::None
     }
 
-    pub fn finish(mut self) -> Block {
+    fn push(&mut self, mut line: SkipIndent) {
+        line.move_indent(4);
+        self.0.push(line.get_full());
+    }
+
+    fn push_empty(&mut self, indent: usize) { self.0.push(" ".repeat(indent.saturating_sub(4))); }
+
+    pub(crate) fn finish(mut self) -> Block {
         while let Some(last) = self.0.last()
             && last.chars().all(char::is_whitespace)
         {

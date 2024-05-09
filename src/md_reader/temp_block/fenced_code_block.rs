@@ -1,11 +1,8 @@
-use std::iter::Peekable;
-use std::str::Chars;
-
-use super::{skip_indent, LineResult, NewResult, SkipIndent};
+use super::{LineResult, NewResult, SkipIndent, SkipIndentResult};
 use crate::ast::Block;
 
 #[derive(Debug)]
-pub struct FencedCodeBlock {
+pub(crate) struct FencedCodeBlock {
     indent: usize,
     fence_size: usize,
     fence_char: char,
@@ -14,7 +11,7 @@ pub struct FencedCodeBlock {
 }
 
 impl FencedCodeBlock {
-    pub fn check2(line: SkipIndent) -> NewResult {
+    pub(crate) fn check(line: SkipIndent) -> NewResult {
         let mut iter = line.iter_rest();
         let fence_size = iter.skip_while_eq(line.first) + 1;
         if fence_size < 3 {
@@ -36,62 +33,48 @@ impl FencedCodeBlock {
         )
     }
 
-    pub fn check(indent: usize, first: char, rest: &mut Peekable<Chars>) -> Option<Self> {
-        let mut count = 1;
-        while rest.next_if_eq(&first).is_some() {
-            count += 1;
-        }
-        if count < 3 {
-            return None;
-        }
-        while matches!(rest.peek(), Some(' ' | '\t')) {
-            rest.next();
-        }
-        let mut info: String = rest.collect();
-        info.truncate(info.trim_end().len());
-        if first == '`' && info.contains('`') {
-            return None;
-        }
-        Some(Self { indent, fence_char: first, fence_size: count, info, content: String::new() })
-    }
-
-    pub fn next(&mut self, line: &str) -> LineResult {
-        let (indent, mut iter) = skip_indent(line, 4);
-        if indent <= 3 {
-            let mut count = 0;
-            while let Some(c) = iter.next()
-                && c == self.fence_char
-            {
-                count += 1;
-            }
-            if count >= self.fence_size {
-                loop {
-                    match iter.next() {
-                        Some(' ' | '\t') => continue,
-                        Some(_) => break,
-                        None => return LineResult::DoneSelf,
+    pub(crate) fn next(&mut self, line: SkipIndentResult) -> LineResult {
+        match line {
+            SkipIndentResult::Line(line) => {
+                if line.indent < 4 && line.first == self.fence_char {
+                    let mut iter = line.iter_rest();
+                    if iter.skip_while_eq(self.fence_char) + 1 >= self.fence_size {
+                        iter.skip_whitespace();
+                        if iter.ended() {
+                            return LineResult::DoneSelf;
+                        }
                     }
                 }
-            }
+                self.push(line);
+            },
+            SkipIndentResult::Blank(indent) => self.push_empty(indent),
         }
-        if self.indent > 0 {
-            let (_, iter) = skip_indent(line, self.indent);
-            for c in iter {
-                self.content.push(c);
-            }
-        } else {
-            self.content.push_str(line);
-        }
-        self.content.push('\n');
         LineResult::None
     }
 
-    pub fn next_blank(&mut self) -> LineResult {
+    fn push(&mut self, mut line: SkipIndent) {
+        line.move_indent_capped(self.indent);
+        line.push_full(&mut self.content);
         self.content.push('\n');
+    }
+
+    pub(crate) fn next_blank(&mut self, indent: usize) -> LineResult {
+        self.push_empty(indent);
         LineResult::None
     }
 
-    pub fn finish(mut self) -> Block {
+    fn push_empty(&mut self, indent: usize) {
+        let indent = indent.saturating_sub(self.indent);
+        if indent > 0 {
+            self.content.reserve(indent + 1);
+            for _ in 0..indent {
+                self.content.push(' ');
+            }
+        }
+        self.content.push('\n');
+    }
+
+    pub(crate) fn finish(mut self) -> Block {
         self.content.pop();
         if let Some(n) = self.info.find(' ') {
             self.info.truncate(n);

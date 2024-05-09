@@ -1,98 +1,81 @@
 use std::iter;
-use std::iter::Peekable;
-use std::str::Chars;
 
-use super::{skip_indent, AtxHeading, FencedCodeBlock, IndentedCodeBlock, LineResult, List, ListResult, Paragraph, TempBlock, ThematicBreak, ToLineResult, SkipIndent, NewResult};
+use super::{
+    AtxHeading, DoneResult, FencedCodeBlock, IndentedCodeBlock, LineResult, List, ListBreakResult,
+    NewResult, Paragraph, SkipIndent, SkipIndentResult, TempBlock, ThematicBreak, ToLineResult,
+};
 use crate::ast::Block;
 
 #[derive(Debug)]
-pub struct BlockQuote {
+pub(crate) struct BlockQuote {
     current: Box<TempBlock>,
     finished: Vec<TempBlock>,
 }
 
 impl BlockQuote {
-    pub fn new2(line: SkipIndent) -> Self {
+    pub(crate) fn new(line: SkipIndent) -> Self {
         let mut current = TempBlock::Empty;
         let mut finished = Vec::new();
         let mut content = line.skip_indent_rest();
-        match content.as_mut() {
-            Some(c) => if c.indent > 0 { c.move_indent(1); },
-            None => {}
-        }
+        content.inspect(|s| s.move_indent_capped(1));
         current.apply_result(TempBlock::next_empty(content), &mut finished);
         Self { current: Box::new(current), finished }
     }
-    
-    pub fn new(indent: usize, line: &str, rest: &mut Peekable<Chars>) -> Self {
-        // Safety: skip_indent only accepts tabs and spaces - 1 byte chars
-        let line =
-            if rest.peek() == Some(&' ') { &line[indent + 2..] } else { &line[indent + 1..] };
-        let mut current = Box::new(TempBlock::default());
-        let mut finished = Vec::new();
-        current.next(line, &mut finished);
-        Self { current, finished }
-    }
 
-    pub fn next(&mut self, line: &str) -> LineResult {
-        let (indent, mut iter) = skip_indent(line, 4);
-        if indent >= 4 {
-            if iter.clone().all(char::is_whitespace) {
-                LineResult::DoneSelf
-            } else {
-                match self.over_indented_continuation(line) {
+    pub(crate) fn next(&mut self, line: SkipIndentResult) -> LineResult {
+        match line {
+            SkipIndentResult::Line(line) => match line.indent {
+                0..=3 => {
+                    if line.first == '>' {
+                        let mut content = line.skip_indent_rest();
+                        content.inspect(|s| s.move_indent_capped(1));
+                        self.current.next(content, &mut self.finished);
+                        return LineResult::None;
+                    }
+                    if let Some(r) = self.continuation(line.clone()) {
+                        return r;
+                    }
+                    match line.first {
+                        '~' | '`' => match FencedCodeBlock::check(line) {
+                            NewResult::New(b) => LineResult::DoneSelfAndNew(b),
+                            NewResult::Text(s) => Paragraph::new(s).done_self_and_new(),
+                        },
+                        '*' | '-' => match List::check_star_dash(line) {
+                            ListBreakResult::List(l) => l.done_self_and_new(),
+                            ListBreakResult::Break(b) => b.done_self_and_other(),
+                            ListBreakResult::Text(s) => Paragraph::new(s).done_self_and_new(),
+                        },
+                        '_' => match ThematicBreak::check(line) {
+                            DoneResult::Done(b) => LineResult::DoneSelfAndOther(b),
+                            DoneResult::Text(s) => Paragraph::new(s).done_self_and_new(),
+                        },
+                        '+' => match List::check_plus(line) {
+                            NewResult::New(l) => LineResult::DoneSelfAndNew(l),
+                            NewResult::Text(s) => Paragraph::new(s).done_self_and_new(),
+                        },
+                        '#' => match AtxHeading::check(line) {
+                            DoneResult::Done(b) => LineResult::DoneSelfAndOther(b),
+                            DoneResult::Text(s) => Paragraph::new(s).done_self_and_new(),
+                        },
+                        '0'..='9' => match List::check_number(line) {
+                            NewResult::New(b) => LineResult::DoneSelfAndNew(b),
+                            NewResult::Text(s) => Paragraph::new(s).done_self_and_new(),
+                        },
+                        _ => Paragraph::new(line).done_self_and_new(),
+                    }
+                },
+                4.. => match self.indented_continuation(line.clone()) {
                     true => LineResult::None,
-                    false => IndentedCodeBlock::new(&mut iter).done_self_and_new(),
-                }
-            }
-        } else {
-            match iter.next() {
-                Some('>') => {
-                    let line = if iter.peek() == Some(&' ') {
-                        &line[indent + 2..]
-                    } else {
-                        &line[indent + 1..]
-                    };
-                    self.current.next(line, &mut self.finished);
-                    LineResult::None
+                    false => IndentedCodeBlock::new(line).done_self_and_new(),
                 },
-                f if let Some(r) = self.continuation(indent, f, line, &mut iter.clone()) => r,
-                Some(c @ ('~' | '`')) => match FencedCodeBlock::check(indent, c, &mut iter) {
-                    Some(b) => b.done_self_and_new(),
-                    None => Paragraph::new(line).done_self_and_new(),
-                },
-                Some(c @ ('*' | '-')) => match List::check_other(c, indent, line, &mut iter) {
-                    ListResult::List(b) => b.done_self_and_new(),
-                    ListResult::Break(b) => b.done_self_and_other(),
-                    ListResult::None => Paragraph::new(line).done_self_and_new(),
-                },
-                Some('_') => match ThematicBreak::check('_', &mut iter) {
-                    Some(b) => b.done_self_and_other(),
-                    None => Paragraph::new(line).done_self_and_new(),
-                },
-                Some('+') => match List::check_plus(indent, line, &mut iter) {
-                    Some(l) => l.done_self_and_new(),
-                    None => Paragraph::new(line).done_self_and_new(),
-                },
-                Some('#') => match AtxHeading::check(&mut iter) {
-                    Some(b) => b.done_self_and_other(),
-                    None => Paragraph::new(line).done_self_and_new(),
-                },
-                Some(c @ '0'..='9') => match List::check_number(c, indent, line, &mut iter) {
-                    Some(b) => b.done_self_and_new(),
-                    None => Paragraph::new(line).done_self_and_new(),
-                },
-                Some(_) => LineResult::DoneSelfAndNew(TempBlock::Paragraph(Paragraph::new(line))),
-                // _ if !iter.all(char::is_whitespace) =>
-                //     LineResult::DoneSelfAndNew(TempBlock::Paragraph(Paragraph::new(line))),
-                _ => LineResult::DoneSelf,
-            }
+            },
+            SkipIndentResult::Blank(_) => LineResult::DoneSelf,
         }
     }
 
-    pub fn next_blank(&mut self) -> LineResult { LineResult::DoneSelf }
+    pub(crate) fn next_blank(&mut self) -> LineResult { LineResult::DoneSelf }
 
-    pub fn finish(self) -> Block {
+    pub(crate) fn finish(self) -> Block {
         Block::BlockQuote(
             self.finished
                 .into_iter()
@@ -102,13 +85,24 @@ impl BlockQuote {
         )
     }
 
-    pub fn continuation(
-        &mut self, indent: usize, first: Option<char>, line: &str, rest: &mut Peekable<Chars>,
-    ) -> Option<LineResult> {
-        self.current.continuation(indent, first, line, rest)
+    pub(crate) fn continuation(&mut self, line: SkipIndent) -> Option<LineResult> {
+        match self.current.as_mut() {
+            TempBlock::Paragraph(p) => Some(p.next_continuation(line)),
+            TempBlock::BlockQuote(b) => b.continuation(line),
+            TempBlock::List(l) => l.continuation(line),
+            _ => None,
+        }
     }
 
-    pub fn over_indented_continuation(&mut self, line: &str) -> bool {
-        self.current.over_indented_continuation(line)
+    pub(crate) fn indented_continuation(&mut self, line: SkipIndent) -> bool {
+        match self.current.as_mut() {
+            TempBlock::Paragraph(p) => {
+                p.next_indented_continuation(line);
+                true
+            },
+            TempBlock::BlockQuote(b) => b.indented_continuation(line),
+            TempBlock::List(l) => l.indented_continuation(line),
+            _ => false,
+        }
     }
 }
