@@ -1,13 +1,13 @@
 use std::iter::{Peekable, Rev};
 use std::str::CharIndices;
 
-pub(crate) enum SkipIndentResult<'a> {
+pub enum SkipIndentResult<'a> {
     Line(SkipIndent<'a>),
     Blank(usize),
 }
 
 impl<'a> SkipIndentResult<'a> {
-    pub(crate) fn inspect<F>(&mut self, f: F)
+    pub fn inspect<F>(&mut self, f: F)
     where F: FnOnce(&mut SkipIndent<'a>) {
         match self {
             SkipIndentResult::Line(s) => f(s),
@@ -16,16 +16,15 @@ impl<'a> SkipIndentResult<'a> {
     }
 }
 
-#[derive(Clone)]
-pub(crate) struct SkipIndent<'a> {
-    pub(crate) first: char,
-    pub(crate) indent: usize,
+pub struct SkipIndent<'a> {
+    pub first: char,
+    pub indent: usize,
     total: usize,
-    pub(crate) line: &'a str,
+    pub line: &'a str,
 }
 
 impl<'a> SkipIndent<'a> {
-    pub(crate) fn new(line: &'a str, indent: usize) -> SkipIndentResult {
+    pub fn skip(line: &'a str, indent: usize) -> SkipIndentResult {
         let mut total = indent;
         for (i, c) in line.char_indices() {
             match c {
@@ -44,34 +43,34 @@ impl<'a> SkipIndent<'a> {
         SkipIndentResult::Blank(total - indent)
     }
 
-    pub(crate) fn move_indent(&mut self, indent: usize) { self.indent -= indent; }
+    pub fn move_indent(&mut self, indent: usize) { self.indent -= indent; }
 
-    pub(crate) fn move_indent_capped(&mut self, indent: usize) {
+    pub fn move_indent_capped(&mut self, indent: usize) {
         self.indent = self.indent.saturating_sub(indent);
     }
 
-    pub(crate) fn get_rest(&self) -> &'a str { unsafe { self.line.get_unchecked(self.first.len_utf8()..) } }
+    pub fn get_rest(&self) -> &'a str { unsafe { self.line.get_unchecked(self.first.len_utf8()..) } }
 
-    pub(crate) fn iter_rest(&self) -> Iter<'a> { Iter::new(self.get_rest()) }
+    pub fn iter_rest(&self) -> Iter<'a> { Iter::new(self.get_rest()) }
 
-    pub(crate) fn iter_full(&self) -> Iter<'a> { Iter::new(self.line) }
+    pub fn iter_full(&self) -> Iter<'a> { Iter::new(self.line) }
 
-    pub(crate) fn indent_iter_rest(&self) -> IndentIter<'a> {
+    pub fn indent_iter_rest(&self) -> IndentIter<'a> {
         IndentIter::new(self.get_rest(), self.total + 1)
     }
 
-    pub(crate) fn skip_indent_rest(&self) -> SkipIndentResult<'a> {
-        Self::new(self.get_rest(), self.total + 1)
+    pub fn skip_indent_rest(&self) -> SkipIndentResult<'a> {
+        Self::skip(self.get_rest(), self.total + 1)
     }
 
-    pub(crate) fn get_full(&self) -> String {
+    pub fn get_full(&self) -> String {
         match self.indent {
             0 => self.line.to_owned(),
             c => " ".repeat(c) + self.line,
         }
     }
 
-    pub(crate) fn push_full(&self, result: &mut String) {
+    pub fn push_full(&self, result: &mut String) {
         match self.indent {
             0 => result.push_str(self.line),
             c => {
@@ -85,7 +84,7 @@ impl<'a> SkipIndent<'a> {
     }
 }
 
-pub(crate) struct Iter<'a> {
+pub struct Iter<'a> {
     source: &'a str,
     iter: Peekable<CharIndices<'a>>,
 }
@@ -93,7 +92,7 @@ pub(crate) struct Iter<'a> {
 impl<'a> Iter<'a> {
     fn new(source: &'a str) -> Self { Self { source, iter: source.char_indices().peekable() } }
 
-    pub(crate) fn skip_while_eq(&mut self, c: char) -> usize {
+    pub fn skip_while_eq(&mut self, c: char) -> usize {
         let mut result = 0;
         loop {
             match self.iter.peek() {
@@ -106,7 +105,7 @@ impl<'a> Iter<'a> {
         }
     }
 
-    pub(crate) fn next_if_eq(&mut self, c: char) -> bool {
+    pub fn next_if_eq(&mut self, c: char) -> bool {
         match self.iter.peek() {
             Some(&(_, current)) if current == c => {
                 self.iter.next();
@@ -116,7 +115,7 @@ impl<'a> Iter<'a> {
         }
     }
 
-    pub(crate) fn skip_whitespace(&mut self) {
+    pub fn skip_whitespace(&mut self) {
         loop {
             match self.iter.peek() {
                 Some((_, ' ' | '\t')) => {
@@ -127,7 +126,7 @@ impl<'a> Iter<'a> {
         }
     }
 
-    pub(crate) fn skip_whitespace_min_one(&mut self) -> bool {
+    pub fn skip_whitespace_min_one(&mut self) -> bool {
         let mut any = false;
         loop {
             match self.iter.peek() {
@@ -140,7 +139,7 @@ impl<'a> Iter<'a> {
         }
     }
 
-    pub(crate) fn skip_while_eq_min_one(&mut self, c: char) -> bool {
+    pub fn skip_while_eq_min_one(&mut self, c: char) -> bool {
         let mut any = false;
         loop {
             match self.iter.peek() {
@@ -153,7 +152,7 @@ impl<'a> Iter<'a> {
         }
     }
 
-    pub(crate) fn ended(&mut self) -> bool { self.iter.peek().is_none() }
+    pub fn ended(&mut self) -> bool { self.iter.peek().is_none() }
 
     fn get_str(&mut self) -> &str {
         match self.iter.peek() {
@@ -162,18 +161,18 @@ impl<'a> Iter<'a> {
         }
     }
 
-    pub(crate) fn iter_rest_rev(&mut self) -> RevIter { RevIter::new(self.get_str()) }
+    pub fn iter_rest_rev(&mut self) -> RevIter { RevIter::new(self.get_str()) }
 
-    pub(crate) fn any_eq(&self, c: char) -> bool {
+    pub fn any_eq(&self, c: char) -> bool {
         self.iter.clone().any(|(_, current)| current == c)
     }
 
-    pub(crate) fn get_string(&mut self) -> String { self.get_str().to_owned() }
+    pub fn get_string(&mut self) -> String { self.get_str().to_owned() }
 
-    pub(crate) fn get_string_trimmed(&mut self) -> String { self.get_str().trim_end().to_owned() }
+    pub fn get_string_trimmed(&mut self) -> String { self.get_str().trim_end().to_owned() }
 }
 
-pub(crate) struct IndentIter<'a> {
+pub struct IndentIter<'a> {
     indent: usize,
     source: &'a str,
     iter: Peekable<CharIndices<'a>>,
@@ -184,7 +183,7 @@ impl<'a> IndentIter<'a> {
         Self { indent, source, iter: source.char_indices().peekable() }
     }
 
-    pub(crate) fn get_number(&mut self, first: char) -> Option<(usize, usize)> {
+    pub fn get_number(&mut self, first: char) -> Option<(usize, usize)> {
         let mut result = first as usize - '0' as usize;
         let mut length = 1;
         loop {
@@ -203,20 +202,20 @@ impl<'a> IndentIter<'a> {
         }
     }
 
-    pub(crate) fn get_closing(&mut self) -> Option<char> {
+    pub fn get_closing(&mut self) -> Option<char> {
         self.iter.next_if(|(_, c)| matches!(c, '.' | ')')).map(|x| x.1)
     }
 
-    pub(crate) fn skip_indent(&mut self) -> SkipIndentResult {
+    pub fn skip_indent(&mut self) -> SkipIndentResult<'a> {
         match self.iter.peek() {
             Some(&(i, _)) =>
-                SkipIndent::new(unsafe { self.source.get_unchecked(i..) }, self.indent),
+                SkipIndent::skip(unsafe { self.source.get_unchecked(i..) }, self.indent),
             None => SkipIndentResult::Blank(0),
         }
     }
 }
 
-pub(crate) struct RevIter<'a> {
+pub struct RevIter<'a> {
     source: &'a str,
     iter: Peekable<Rev<CharIndices<'a>>>,
 }
@@ -226,7 +225,7 @@ impl<'a> RevIter<'a> {
         Self { source, iter: source.char_indices().rev().peekable() }
     }
 
-    pub(crate) fn skip_while_eq(&mut self, c: char) -> usize {
+    pub fn skip_while_eq(&mut self, c: char) -> usize {
         let mut count = 0;
         loop {
             match self.iter.peek() {
@@ -239,7 +238,7 @@ impl<'a> RevIter<'a> {
         }
     }
 
-    pub(crate) fn skip_whitespace(&mut self) {
+    pub fn skip_whitespace(&mut self) {
         loop {
             match self.iter.peek() {
                 Some(&(_, ' ' | '\t')) => {
@@ -257,7 +256,7 @@ impl<'a> RevIter<'a> {
         }
     }
 
-    pub(crate) fn next_if_whitespace_or_none(&mut self) -> bool {
+    pub fn next_if_whitespace_or_none(&mut self) -> bool {
         match self.iter.peek() {
             Some((_, ' ' | '\t')) | None => {
                 self.iter.next();
@@ -267,5 +266,5 @@ impl<'a> RevIter<'a> {
         }
     }
 
-    pub(crate) fn get_string(&mut self) -> String { self.get_str().to_owned() }
+    pub fn get_string(&mut self) -> String { self.get_str().to_owned() }
 }

@@ -1,6 +1,6 @@
-use super::{DoneResult, SkipIndent};
 use crate::ast::Block;
 use crate::inline_parser::InlineParser;
+use crate::md_reader::temp_block::{CheckResult, SkipIndent};
 
 #[derive(Debug)]
 pub struct AtxHeading {
@@ -9,17 +9,17 @@ pub struct AtxHeading {
 }
 
 impl AtxHeading {
-    pub(crate) fn check(line: SkipIndent) -> DoneResult {
+    pub fn check(line: SkipIndent) -> CheckResult {
         let mut iter = line.iter_rest();
         let count = 1 + iter.skip_while_eq('#');
         if count > 6 {
-            return DoneResult::Text(line);
+            return CheckResult::Text(line);
         }
         if iter.ended() {
-            return DoneResult::Done(Self { level: count, content: String::new() }.into());
+            return CheckResult::Done(Self { level: count, content: String::new() }.into());
         }
         if !iter.skip_whitespace_min_one() {
-            return DoneResult::Text(line);
+            return CheckResult::Text(line);
         }
         let mut rev = iter.iter_rest_rev();
         rev.skip_whitespace();
@@ -29,10 +29,10 @@ impl AtxHeading {
         } else {
             iter.get_string()
         };
-        DoneResult::Done(Self { level: count, content }.into())
+        CheckResult::Done(Self { level: count, content }.into())
     }
 
-    pub(crate) fn finish(self) -> Block {
+    pub fn finish(self) -> Block {
         Block::new_header(self.level, InlineParser::parse_line(self.content))
     }
 }

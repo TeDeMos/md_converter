@@ -53,10 +53,13 @@ pub enum Block {
 }
 
 impl Block {
+    #[must_use]
     pub fn new_header(level: usize, inlines: Vec<Inline>) -> Self {
+        #[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
         Self::Header(level as Int, attr_empty(), inlines)
     }
 
+    #[must_use]
     pub fn new_table(rows: Vec<Vec<String>>, alignments: Vec<Alignment>, size: usize) -> Self {
         let mut iter = rows.into_iter();
         Self::Table(
@@ -97,14 +100,17 @@ pub enum Inline {
 
 type Attr = (Text, Vec<Text>, Vec<(Text, Text)>);
 
+#[must_use]
 pub fn attr_empty() -> Attr { (String::new(), vec![], vec![]) }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct Format(pub Text);
 
 type ListAttributes = (Int, ListNumberStyle, ListNumberDelim);
 
-pub fn new_list_attributes(starting: i32, closing: char) -> ListAttributes {
+#[must_use]
+pub fn new_list_attributes(starting: usize, closing: char) -> ListAttributes {
+    #[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
     (starting as Int, ListNumberStyle::Decimal, match closing {
         '.' => ListNumberDelim::Period,
         ')' => ListNumberDelim::OneParen,
@@ -116,6 +122,7 @@ pub fn new_list_attributes(starting: i32, closing: char) -> ListAttributes {
 pub struct Caption(pub Option<ShortCaption>, pub Vec<Block>);
 
 impl Caption {
+    #[must_use]
     pub fn empty() -> Self { Self(None, Vec::new()) }
 }
 
@@ -125,6 +132,7 @@ type ColSpec = (Alignment, ColWidth);
 pub struct TableHead(pub Attr, pub Vec<Row>);
 
 impl TableHead {
+    #[must_use]
     pub fn new(row: Vec<String>, size: usize) -> Self {
         Self(attr_empty(), vec![Row::new(row, size)])
     }
@@ -144,10 +152,10 @@ impl TableBody {
 pub struct TableFoot(pub Attr, pub Vec<Row>);
 
 impl TableFoot {
-    pub fn empty() -> Self { Self(attr_empty(), Vec::new()) }
+    #[must_use] pub fn empty() -> Self { Self(attr_empty(), Vec::new()) }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[serde(tag = "t")]
 pub enum QuoteType {
     SingleQuote,
@@ -171,7 +179,7 @@ pub struct Citation {
     pub hash: Int,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[serde(tag = "t")]
 pub enum MathType {
     DisplayMath,
@@ -180,7 +188,7 @@ pub enum MathType {
 
 type Target = (Text, Text);
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[serde(tag = "t")]
 pub enum ListNumberStyle {
     DefaultStyle,
@@ -192,7 +200,7 @@ pub enum ListNumberStyle {
     UpperAlpha,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[serde(tag = "t")]
 pub enum ListNumberDelim {
     DefaultDelim,
@@ -203,7 +211,7 @@ pub enum ListNumberDelim {
 
 type ShortCaption = Vec<Inline>;
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 #[serde(tag = "t")]
 pub enum Alignment {
     #[serde(rename = "AlignLeft")]
@@ -239,10 +247,10 @@ impl Row {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct RowHeadColumns(pub Int);
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[serde(tag = "t")]
 pub enum CitationMode {
     AuthorInText,
@@ -254,7 +262,7 @@ pub enum CitationMode {
 pub struct Cell(pub Attr, pub Alignment, pub RowSpan, pub ColSpan, pub Vec<Block>);
 
 impl Cell {
-    pub fn new(content: String) -> Self {
+    #[must_use] pub fn new(content: String) -> Self {
         let inlines = InlineParser::parse_line(content);
         Self(
             attr_empty(),
@@ -265,13 +273,13 @@ impl Cell {
         )
     }
 
-    pub fn empty() -> Self {
+    #[must_use] pub fn empty() -> Self {
         Self(attr_empty(), Alignment::Default, RowSpan(1), ColSpan(1), Vec::new())
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct RowSpan(pub Int);
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct ColSpan(pub Int);

@@ -1,25 +1,25 @@
 use crate::ast::Block;
-use crate::md_reader::temp_block::{DoneResult, SkipIndent};
+use crate::md_reader::temp_block::{CheckResult, SkipIndent};
 
 #[derive(Debug)]
-pub(crate) struct ThematicBreak;
+pub struct ThematicBreak;
 
 impl ThematicBreak {
-    pub(crate) fn check(line: SkipIndent) -> DoneResult {
+    pub fn check(line: SkipIndent) -> CheckResult {
         let mut count = 1;
         for c in line.get_rest().chars() {
             match c {
                 ' ' | '\t' => continue,
                 '_' => count += 1,
-                _ => return DoneResult::Text(line),
+                _ => return CheckResult::Text(line),
             }
         }
         if count >= 3 {
-            DoneResult::Done(ThematicBreak.into())
+            CheckResult::Done(Self.into())
         } else {
-            DoneResult::Text(line)
+            CheckResult::Text(line)
         }
     }
 
-    pub(crate) fn finish(self) -> Block { Block::HorizontalRule }
+    pub const fn finish() -> Block { Block::HorizontalRule }
 }

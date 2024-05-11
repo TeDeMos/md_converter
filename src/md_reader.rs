@@ -16,7 +16,7 @@ impl AstReader for MdReader {
         let mut current = TempBlock::default();
         let mut finished: Vec<TempBlock> = Vec::new();
         for line in source.lines() {
-            current.next_line(line, &mut finished);
+            current.next_str(line, &mut finished);
         }
         let result =
             finished.into_iter().chain(iter::once(current)).filter_map(TempBlock::finish).collect();
