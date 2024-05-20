@@ -45,6 +45,11 @@ impl InlineParser {
             let mut start_slice_index: usize = 0;
             let mut length: u32 = 0;
             loop {
+                match char_iter.peek() {
+                    Some(_c @ (_, '\t' | ' ')) => {}
+                    Some(_) => {space = false}
+                    None => {}
+                }
                 if matches!(html_entity_state, HtmlEntityState::Dec | HtmlEntityState::Hex){
                     match char_iter.next() {
                         Some((end_index,';')) => {
@@ -176,11 +181,12 @@ mod test {
         // let result = MdReader::read("> ```\n> aaa\n\nbbb").into_ok();
         let test = vec!["hello        rust \\' \\ab".to_string()];
         let result = InlineParser::parse_lines(&test);
-        let Inline::Str(s) = &result[2] else { return };
-        for c in s.chars() {
-            println!("{}", c);
-        }
-        dbg!(result);
+        assert_eq!(Inline::Str("hello".to_string()), result[0]);
+        assert_eq!(Inline::Space, result[1]);
+        assert_eq!(Inline::Str("rust".to_string()), result[2]);
+        assert_eq!(Inline::Space, result[3]);
+        assert_eq!(Inline::Str("'".to_string()), result[4]);
+        assert_eq!(Inline::Space, result[5]);
     }
     
     #[test]
@@ -196,13 +202,12 @@ mod test {
     
     #[test]
     fn html_entity_hex_test() {
-        use crate::inline_parser::*;
         let test = vec!["&#x2A;  asdfsasdasdasffsasdf".to_string()];
         let result = InlineParser::parse_lines(&test);
         let Inline::Str(s) = &result[0] else {return};
         assert_eq!(s.to_string(),String::from("*"));
         assert_eq!(Inline::Space,result[1]);
         let Inline::Str(s) = &result[2] else {return};
-        assert_eq!(s.to_string(),String::from("asdfsasdasdasffs"));
+        assert_eq!(s.to_string(),String::from("asdfsasdasdasffsasdf"));
     }
 }
