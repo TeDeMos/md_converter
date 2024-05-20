@@ -1,11 +1,10 @@
-use derive_more::From;
-
 use atx_heading::AtxHeading;
 use block_quote::BlockQuote;
+use derive_more::From;
 use fenced_code_block::FencedCodeBlock;
 use indented_code_block::IndentedCodeBlock;
 use iters::{SkipIndent, SkipIndentResult};
-use list::{List, ListBreakResult, ListBreakSetextResult};
+use list::{CheckOrSetextResult, List};
 use paragraph::Paragraph;
 use table::Table;
 use thematic_break::ThematicBreak;
@@ -22,8 +21,9 @@ mod paragraph;
 mod table;
 mod thematic_break;
 
-#[derive(From, Debug)]
+#[derive(From, Debug, Default)]
 pub enum TempBlock {
+    #[default]
     Empty,
     Paragraph(Paragraph),
     AtxHeading(AtxHeading),
@@ -36,26 +36,62 @@ pub enum TempBlock {
 }
 
 impl TempBlock {
-    pub(crate) fn next_line(&mut self, line: &str, finished: &mut Vec<Self>) {
-        self.next(SkipIndent::new(line, 0), finished);
+    pub fn next_str(&mut self, line: &str, finished: &mut Vec<Self>) {
+        self.next(SkipIndent::skip(line, 0), finished);
     }
 
     fn next(&mut self, line: SkipIndentResult, finished: &mut Vec<Self>) {
-        let result = self.next_no_apply(line);
+        let result = match line {
+            SkipIndentResult::Line(line) => self.next_line(line),
+            SkipIndentResult::Blank(i) => self.next_blank(i).0,
+        };
         self.apply_result(result, finished);
     }
 
-    fn next_no_apply(&mut self, line: SkipIndentResult) -> LineResult {
+    fn next_line(&mut self, line: SkipIndent) -> LineResult {
         match self {
-            Self::Empty => Self::next_empty(line),
+            Self::Empty => Self::empty_next_line(line),
             Self::Paragraph(p) => p.next(line),
             Self::IndentedCodeBlock(i) => i.next(line),
             Self::FencedCodeBlock(f) => f.next(line),
             Self::Table(t) => t.next(line),
             Self::BlockQuote(b) => b.next(line),
             Self::List(l) => l.next(line),
-            // Safety: atx headings and thematic breaks are always passed as finished
             Self::AtxHeading(_) | Self::ThematicBreak(_) => unreachable!(),
+        }
+    }
+
+    fn next_blank(&mut self, indent: usize) -> (LineResult, bool) {
+        match self {
+            Self::Empty => return (LineResult::None, true),
+            Self::Paragraph(_) | Self::Table(_) | Self::BlockQuote(_) =>
+                return (LineResult::DoneSelf, true),
+            Self::IndentedCodeBlock(i) => i.push_blank(indent),
+            Self::FencedCodeBlock(f) => f.push_blank(indent),
+            Self::List(l) => l.next_blank(indent),
+            Self::AtxHeading(_) | Self::ThematicBreak(_) => unreachable!(),
+        }
+        (LineResult::None, false)
+    }
+
+    fn next_continuation(&mut self, line: SkipIndent) -> LineResult {
+        match self {
+            Self::Paragraph(p) => p.next_continuation(line),
+            Self::BlockQuote(b) => b.current.next_continuation(line),
+            Self::List(List { current: Some(c), .. }) => c.current.next_continuation(line),
+            _ => Self::check_block_known_indent(line).into_line_result_paragraph(true),
+        }
+    }
+
+    fn next_indented_continuation(&mut self, line: SkipIndent) -> LineResult {
+        match self {
+            Self::Paragraph(p) => {
+                p.next_indented_continuation(&line);
+                LineResult::None
+            },
+            Self::BlockQuote(b) => b.current.next_indented_continuation(line),
+            Self::List(List { current: Some(c), .. }) => c.current.next_indented_continuation(line),
+            _ => LineResult::DoneSelfAndNew(IndentedCodeBlock::new(line).into()),
         }
     }
 
@@ -73,12 +109,12 @@ impl TempBlock {
         }
     }
 
-    pub(crate) fn finish(self) -> Option<Block> {
+    pub fn finish(self) -> Option<Block> {
         match self {
             Self::Empty => None,
             Self::Paragraph(p) => Some(p.finish()),
             Self::AtxHeading(a) => Some(a.finish()),
-            Self::ThematicBreak(t) => Some(t.finish()),
+            Self::ThematicBreak(_) => Some(ThematicBreak::finish()),
             Self::IndentedCodeBlock(i) => Some(i.finish()),
             Self::FencedCodeBlock(c) => Some(c.finish()),
             Self::Table(t) => Some(t.finish()),
@@ -87,58 +123,68 @@ impl TempBlock {
         }
     }
 
-    fn next_empty(line: SkipIndentResult) -> LineResult {
+    fn new_empty(line: SkipIndentResult) -> (Self, Vec<Self>) {
         match line {
-            SkipIndentResult::Line(line) => match line.indent {
-                0..=3 => Self::next_empty_known_indent(line),
-                4.. => IndentedCodeBlock::new(line).new(),
+            SkipIndentResult::Line(line) => {
+                let mut new = Self::Empty;
+                let mut finished = Vec::new();
+                new.apply_result(Self::empty_next_line(line), &mut finished);
+                (new, finished)
             },
-            SkipIndentResult::Blank(_) => LineResult::None,
+            SkipIndentResult::Blank(_) => (Self::Empty, Vec::new()),
         }
     }
 
-    fn next_empty_known_indent(line: SkipIndent) -> LineResult {
-        match line.first {
-            '~' | '`' => match FencedCodeBlock::check(line) {
-                NewResult::New(b) => LineResult::New(b),
-                NewResult::Text(s) => Paragraph::new(s).new(),
-            },
-            '*' | '-' => match List::check_star_dash(line) {
-                ListBreakResult::List(l) => l.new(),
-                ListBreakResult::Break(b) => b.done(),
-                ListBreakResult::Text(s) => Paragraph::new(s).new(),
-            },
-            '_' => match ThematicBreak::check(line) {
-                DoneResult::Done(b) => LineResult::Done(b),
-                DoneResult::Text(s) => Paragraph::new(s).new(),
-            },
-            '+' => match List::check_plus(line) {
-                NewResult::New(b) => LineResult::New(b),
-                NewResult::Text(s) => Paragraph::new(s).new(),
-            },
-            '#' => match AtxHeading::check(line) {
-                DoneResult::Done(b) => LineResult::Done(b),
-                DoneResult::Text(s) => Paragraph::new(s).new(),
-            },
-            '>' => BlockQuote::new(line).new(),
-            '0'..='9' => match List::check_number(line) {
-                NewResult::New(b) => LineResult::New(b),
-                NewResult::Text(s) => Paragraph::new(s).new(),
-            },
-            _ => Paragraph::new(line).new(),
+    fn new_empty_known_indent(line: SkipIndent) -> (Self, Vec<Self>) {
+        let mut new = Self::Empty;
+        let mut finished = Vec::new();
+        new.apply_result(Self::empty_next_line_known_indent(line), &mut finished);
+        (new, finished)
+    }
+
+    fn check_block(line: SkipIndent) -> CheckResult {
+        match line.indent {
+            0..=3 => Self::check_block_known_indent(line),
+            4.. => CheckResult::New(IndentedCodeBlock::new(line).into()),
         }
+    }
+
+    fn check_block_known_indent(line: SkipIndent) -> CheckResult {
+        match line.first {
+            '#' => AtxHeading::check(line),
+            '_' => ThematicBreak::check(line),
+            '~' | '`' => FencedCodeBlock::check(line),
+            '>' => CheckResult::New(BlockQuote::new(&line).into()),
+            '*' | '-' => List::check_star_dash(line),
+            '+' => List::check_plus(line),
+            '0'..='9' => List::check_number(line),
+            _ => CheckResult::Text(line),
+        }
+    }
+
+    fn empty_next_line(line: SkipIndent) -> LineResult {
+        Self::check_block(line).into_line_result_paragraph(false)
+    }
+
+    fn empty_next_line_known_indent(line: SkipIndent) -> LineResult {
+        Self::check_block_known_indent(line).into_line_result_paragraph(false)
     }
 
     fn take(&mut self) -> Self { std::mem::take(self) }
 
     fn replace(&mut self, new: Self) -> Self { std::mem::replace(self, new) }
+
+    const fn is_empty(&self) -> bool { matches!(self, Self::Empty) }
+
+    const fn as_list(&self) -> Option<&List> {
+        match self {
+            Self::List(l) => Some(l),
+            _ => None,
+        }
+    }
 }
 
-impl Default for TempBlock {
-    fn default() -> Self { Self::Empty }
-}
-
-enum LineResult {
+pub enum LineResult {
     None,
     DoneSelf,
     New(TempBlock),
@@ -147,31 +193,45 @@ enum LineResult {
     DoneSelfAndOther(TempBlock),
 }
 
-pub enum NewResult<'a> {
-    New(TempBlock),
-    Text(SkipIndent<'a>),
+impl LineResult {
+    pub const fn is_done_or_new(&self) -> bool { matches!(self, Self::New(_) | Self::Done(_)) }
+
+    pub const fn is_done_self_and_new_or_other(&self) -> bool {
+        matches!(self, Self::DoneSelfAndNew(_) | Self::DoneSelfAndOther(_))
+    }
 }
 
-pub enum DoneResult<'a> {
+pub enum CheckResult<'a> {
+    New(TempBlock),
     Done(TempBlock),
     Text(SkipIndent<'a>),
 }
 
-trait ToLineResult {
-    fn new(self) -> LineResult;
-    fn done(self) -> LineResult;
-    fn done_self_and_new(self) -> LineResult;
-    fn done_self_and_other(self) -> LineResult;
+impl<'a> CheckResult<'a> {
+    pub fn into_line_result_paragraph(self, done_self: bool) -> LineResult {
+        match (self, done_self) {
+            (CheckResult::New(b), false) => LineResult::New(b),
+            (CheckResult::New(b), true) => LineResult::DoneSelfAndNew(b),
+            (CheckResult::Done(b), false) => LineResult::Done(b),
+            (CheckResult::Done(b), true) => LineResult::DoneSelfAndOther(b),
+            (CheckResult::Text(s), false) => LineResult::New(Paragraph::new(&s).into()),
+            (CheckResult::Text(s), true) => LineResult::DoneSelfAndNew(Paragraph::new(&s).into()),
+        }
+    }
+
+    pub fn into_line_result<F>(self, done_self: bool, text_function: F) -> LineResult
+    where F: FnOnce(SkipIndent<'a>) -> LineResult {
+        match (self, done_self) {
+            (CheckResult::New(b), false) => LineResult::New(b),
+            (CheckResult::New(b), true) => LineResult::DoneSelfAndNew(b),
+            (CheckResult::Done(b), false) => LineResult::Done(b),
+            (CheckResult::Done(b), true) => LineResult::DoneSelfAndOther(b),
+            (CheckResult::Text(s), _) => text_function(s),
+        }
+    }
 }
 
-impl<T> ToLineResult for T
-where T: Into<TempBlock>
-{
-    fn new(self) -> LineResult { LineResult::New(self.into()) }
-
-    fn done(self) -> LineResult { LineResult::Done(self.into()) }
-
-    fn done_self_and_new(self) -> LineResult { LineResult::DoneSelfAndNew(self.into()) }
-
-    fn done_self_and_other(self) -> LineResult { LineResult::DoneSelfAndOther(self.into()) }
+pub enum NewResult<'a> {
+    New(TempBlock),
+    Text(SkipIndent<'a>),
 }
