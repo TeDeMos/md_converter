@@ -29,6 +29,7 @@ impl HtmlEntityState {
 }
 
 impl InlineParser {
+    #![allow(clippy::too_many_lines)]
     #[must_use] pub fn parse_lines(lines: &[String]) -> Vec<Inline> {
         //todo
         let mut result = Vec::new();
@@ -53,10 +54,21 @@ impl InlineParser {
                                 Ok(value) => {current.push(from_u32(value).unwrap())},
                                 Err(_) => {current.push(from_u32(0xFFFD).unwrap())}
                             }
+                            html_entity_state = HtmlEntityState::NoState;
                         },
-                        Some((_,_ )) if length < html_entity_state.get_entity_max_length() => {
-                            length += 1;
+                        Some((_,_c@ ('0'..='9'))) if length < html_entity_state.get_entity_max_length() => {
+                                length += 1;
                         }
+                        Some((_,_c @ ( 'a'..='f' | 'A'..='F'))) if html_entity_state.get_base() == 16 => {
+                            if length < html_entity_state.get_entity_max_length() {
+                                length += 1;
+                            }
+                        }
+                        //This could be written better I think
+                        Some((_,_c @ ('x' | 'X'))) if html_entity_state.get_base() == 16 => {
+                            continue;
+                        }
+                        
                         Some((end_index,_)) => {
                             html_entity_state = HtmlEntityState::NoState;
                             length = 0;
@@ -93,11 +105,13 @@ impl InlineParser {
                             Some((_,'#')) => {
                                 char_iter.next();
                                 match char_iter.peek() {
-                                    Some((_, _c @ ('X' | 'x'))) => {
+                                    Some((index, _c @ ('X' | 'x'))) => {
                                         html_entity_state = HtmlEntityState::Hex;
+                                        start_slice_index = *index+1;
                                     }
-                                    Some((_,_)) => {
+                                    Some((index,_)) => {
                                         html_entity_state = HtmlEntityState::Dec;
+                                        start_slice_index = *index;
                                     }
                                     None => {}
                                 }
@@ -106,7 +120,9 @@ impl InlineParser {
                             None => {},
                         }
                     },
-                    Some((_,_)) => {}
+                    Some((_,c)) => {
+                        current.push(c);
+                    }
                     None => {
                         if !current.is_empty() {
                             result.push(Inline::Str(current));
@@ -153,6 +169,7 @@ impl InlineParser {
 
 #[cfg(test)]
 mod test {
+    use std::fmt::Debug;
     use crate::inline_parser::*;
     #[test]
     fn test_test() {
@@ -164,5 +181,28 @@ mod test {
             println!("{}", c);
         }
         dbg!(result);
+    }
+    
+    #[test]
+    fn html_entity_dec_test() {
+        let test = vec!["&#42;  asdfsasdasdasffs".to_string()];
+        let result = InlineParser::parse_lines(&test);
+        let Inline::Str(s) = &result[0] else {return};
+        assert_eq!(s.to_string(),String::from("*"));
+        assert_eq!(Inline::Space,result[1]);
+        let Inline::Str(s) = &result[2] else {return};
+        assert_eq!(s.to_string(),String::from("asdfsasdasdasffs"));
+    }
+    
+    #[test]
+    fn html_entity_hex_test() {
+        use crate::inline_parser::*;
+        let test = vec!["&#x2A;  asdfsasdasdasffsasdf".to_string()];
+        let result = InlineParser::parse_lines(&test);
+        let Inline::Str(s) = &result[0] else {return};
+        assert_eq!(s.to_string(),String::from("*"));
+        assert_eq!(Inline::Space,result[1]);
+        let Inline::Str(s) = &result[2] else {return};
+        assert_eq!(s.to_string(),String::from("asdfsasdasdasffs"));
     }
 }
