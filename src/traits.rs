@@ -9,5 +9,5 @@ pub trait AstReader {
 pub trait AstWriter {
     type WriteError;
 
-    fn write(&mut self, ast: Pandoc) -> Result<String, Self::WriteError>;
+    fn write(ast: Pandoc) -> Result<String, Self::WriteError>;
 }

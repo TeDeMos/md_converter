@@ -1,7 +1,9 @@
 use crate::ast::Block;
 use crate::inline_parser::InlineParser;
-use crate::md_reader::temp_block::CheckOrSetextResult;
-use crate::md_reader::temp_block::{AtxHeading, BlockQuote, CheckResult, FencedCodeBlock, LineResult, List, NewResult, SkipIndent, Table, TempBlock, ThematicBreak};
+use crate::md_reader::temp_block::{
+    AtxHeading, BlockQuote, CheckOrSetextResult, CheckResult, FencedCodeBlock, LineResult, List,
+    NewResult, SkipIndent, Table, TempBlock, ThematicBreak,
+};
 
 #[derive(Debug)]
 pub struct Paragraph {

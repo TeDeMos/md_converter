@@ -98,7 +98,7 @@ pub enum Inline {
     Span(Attr, Vec<Inline>),
 }
 
-type Attr = (Text, Vec<Text>, Vec<(Text, Text)>);
+pub type Attr = (Text, Vec<Text>, Vec<(Text, Text)>);
 
 #[must_use]
 pub fn attr_empty() -> Attr { (String::new(), vec![], vec![]) }
@@ -126,7 +126,7 @@ impl Caption {
     pub fn empty() -> Self { Self(None, Vec::new()) }
 }
 
-type ColSpec = (Alignment, ColWidth);
+pub type ColSpec = (Alignment, ColWidth);
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct TableHead(pub Attr, pub Vec<Row>);
@@ -152,7 +152,8 @@ impl TableBody {
 pub struct TableFoot(pub Attr, pub Vec<Row>);
 
 impl TableFoot {
-    #[must_use] pub fn empty() -> Self { Self(attr_empty(), Vec::new()) }
+    #[must_use]
+    pub fn empty() -> Self { Self(attr_empty(), Vec::new()) }
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -262,7 +263,8 @@ pub enum CitationMode {
 pub struct Cell(pub Attr, pub Alignment, pub RowSpan, pub ColSpan, pub Vec<Block>);
 
 impl Cell {
-    #[must_use] pub fn new(content: String) -> Self {
+    #[must_use]
+    pub fn new(content: String) -> Self {
         let inlines = InlineParser::parse_line(content);
         Self(
             attr_empty(),
@@ -273,7 +275,8 @@ impl Cell {
         )
     }
 
-    #[must_use] pub fn empty() -> Self {
+    #[must_use]
+    pub fn empty() -> Self {
         Self(attr_empty(), Alignment::Default, RowSpan(1), ColSpan(1), Vec::new())
     }
 }

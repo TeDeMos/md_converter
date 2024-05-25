@@ -49,7 +49,9 @@ impl<'a> SkipIndent<'a> {
         self.indent = self.indent.saturating_sub(indent);
     }
 
-    pub fn get_rest(&self) -> &'a str { unsafe { self.line.get_unchecked(self.first.len_utf8()..) } }
+    pub fn get_rest(&self) -> &'a str {
+        unsafe { self.line.get_unchecked(self.first.len_utf8()..) }
+    }
 
     pub fn iter_rest(&self) -> Iter<'a> { Iter::new(self.get_rest()) }
 
@@ -163,9 +165,7 @@ impl<'a> Iter<'a> {
 
     pub fn iter_rest_rev(&mut self) -> RevIter { RevIter::new(self.get_str()) }
 
-    pub fn any_eq(&self, c: char) -> bool {
-        self.iter.clone().any(|(_, current)| current == c)
-    }
+    pub fn any_eq(&self, c: char) -> bool { self.iter.clone().any(|(_, current)| current == c) }
 
     pub fn get_string(&mut self) -> String { self.get_str().to_owned() }
 
