@@ -5,6 +5,7 @@ use crate::md_reader::temp_block::{
     CheckResult, IndentedCodeBlock, LineResult, SkipIndent, SkipIndentResult, TempBlock,
     ThematicBreak,
 };
+use crate::md_reader::temp_block::link_definition::Links;
 
 #[derive(Debug)]
 pub struct List {
@@ -188,6 +189,10 @@ impl List {
                 Block::OrderedList(new_list_attributes(starting, closing), done),
         }
     }
+
+    pub fn iter_items_mut(&mut self) -> impl Iterator<Item = &mut Item> {
+        self.items.iter_mut().chain(self.current.as_mut())
+    }
 }
 
 enum CheckMatchingResult<'a> {
@@ -198,6 +203,7 @@ enum CheckMatchingResult<'a> {
 #[derive(Debug)]
 pub struct Item {
     finished: Vec<TempBlock>,
+    pub links: Links,
     pub current: Box<TempBlock>,
     width: usize,
     indent: usize,
@@ -239,6 +245,7 @@ impl Item {
     fn new_empty(width: usize, indent: usize) -> Self {
         Self {
             finished: Vec::new(),
+            links: Links::new(),
             current: Box::new(TempBlock::Empty),
             width,
             indent,
@@ -248,14 +255,15 @@ impl Item {
     }
 
     fn new(width: usize, indent: usize, content: SkipIndent) -> Self {
-        let (current, finished) = TempBlock::new_empty_known_indent(content);
-        Self { finished, current: Box::new(current), width, indent, gap: false, loose: false }
+        let (current, finished, links) = TempBlock::new_empty_known_indent(content);
+        Self { finished, links, current: Box::new(current), width, indent, gap: false, loose: false }
     }
 
     fn new_code(width: usize, indent: usize, mut content: SkipIndent) -> Self {
         content.move_indent(1);
         Self {
             finished: Vec::new(),
+            links: Links::new(),
             current: Box::new(IndentedCodeBlock::new(content).into()),
             width,
             indent,
@@ -429,7 +437,7 @@ impl Item {
             self.loose = true;
         }
         self.gap = false;
-        self.current.apply_result(result, &mut self.finished);
+        self.current.apply_result(result, &mut self.finished, &mut self.links);
     }
 
     fn next_blank(&mut self, indent: usize) -> bool {
@@ -439,7 +447,7 @@ impl Item {
         let result;
         (result, self.gap) =
             self.current.next_blank(indent.saturating_sub(self.indent + self.width));
-        self.current.apply_result(result, &mut self.finished);
+        self.current.apply_result(result, &mut self.finished, &mut self.links);
         false
     }
 
@@ -459,4 +467,5 @@ impl Item {
             .collect()
         }
     }
+    
 }

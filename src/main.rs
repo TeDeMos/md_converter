@@ -1,9 +1,9 @@
 #![feature(unwrap_infallible)]
 
+use md_converter::ast::Inline;
 use md_converter::inline_parser::InlineParser;
 use md_converter::md_reader::MdReader;
 use md_converter::traits::AstReader;
-use md_converter::ast::Inline;
 
 fn main() {
     let result = MdReader::read(
@@ -11,4 +11,12 @@ fn main() {
     )
     .into_ok();
     dbg!(result);
+    let mut s = String::from("dal[pjfela");
+    unsafe {
+        for b in s.as_bytes_mut() {
+            if *b == b'\n' {
+                *b = b' ';
+            }
+        }
+    }
 }

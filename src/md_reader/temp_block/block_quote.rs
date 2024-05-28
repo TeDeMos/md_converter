@@ -1,20 +1,21 @@
 use std::iter;
 
 use crate::ast::Block;
-use crate::md_reader::temp_block::{LineResult, SkipIndent, TempBlock};
+use crate::md_reader::temp_block::{LineResult, Links, SkipIndent, TempBlock};
 
 #[derive(Debug)]
 pub struct BlockQuote {
     pub current: Box<TempBlock>,
     finished: Vec<TempBlock>,
+    pub links: Links,
 }
 
 impl BlockQuote {
     pub fn new(line: &SkipIndent) -> Self {
         let mut content = line.skip_indent_rest();
         content.inspect(|s| s.move_indent_capped(1));
-        let (current, finished) = TempBlock::new_empty(content);
-        Self { current: Box::new(current), finished }
+        let (current, finished, links) = TempBlock::new_empty(content);
+        Self { current: Box::new(current), finished, links }
     }
 
     pub fn next(&mut self, line: SkipIndent) -> LineResult {
@@ -23,7 +24,7 @@ impl BlockQuote {
                 if line.first == '>' {
                     let mut content = line.skip_indent_rest();
                     content.inspect(|s| s.move_indent_capped(1));
-                    self.current.next(content, &mut self.finished);
+                    self.current.next(content, &mut self.finished, &mut self.links);
                     LineResult::None
                 } else {
                     self.current.next_continuation(line)

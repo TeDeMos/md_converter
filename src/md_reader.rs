@@ -3,6 +3,7 @@ use std::iter;
 use temp_block::TempBlock;
 
 use crate::ast::Pandoc;
+use crate::md_reader::temp_block::Links;
 use crate::traits::AstReader;
 
 mod temp_block;
@@ -14,9 +15,10 @@ impl AstReader for MdReader {
 
     fn read(source: &str) -> Result<Pandoc, Self::ReadError> {
         let mut current = TempBlock::default();
-        let mut finished: Vec<TempBlock> = Vec::new();
+        let mut finished = Vec::new();
+        let mut links = Links::new();
         for line in source.lines() {
-            current.next_str(line, &mut finished);
+            current.next_str(line, &mut finished, &mut links);
         }
         let result =
             finished.into_iter().chain(iter::once(current)).filter_map(TempBlock::finish).collect();
