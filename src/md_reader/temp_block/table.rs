@@ -38,7 +38,8 @@ impl Table {
         if iter.ended() {
             let mut result =
                 Self { size: paragraph.table_header_length, alignments, rows: Vec::new() };
-            result.push(&paragraph.lines.pop().unwrap());
+            result.push(paragraph.get_last_line());
+            paragraph.trim_last_line();
             NewResult::New(result.into())
         } else {
             NewResult::Text(line)

@@ -20,6 +20,7 @@ impl AstReader for MdReader {
         for line in source.lines() {
             current.next_str(line, &mut finished, &mut links);
         }
+        current.finish_links(&mut links);
         let result =
             finished.into_iter().chain(iter::once(current)).filter_map(TempBlock::finish).collect();
         Ok(Pandoc { blocks: result, ..Default::default() })
@@ -72,7 +73,7 @@ mod tests {
         }
         assert!(results.is_empty(), "Tests {results:?} failed");
     }
-
+    
     #[test]
     fn tabs_and_precedence() { test(1, 12) }
 

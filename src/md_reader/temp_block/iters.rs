@@ -92,8 +92,16 @@ pub struct Iter<'a> {
 }
 
 impl<'a> Iter<'a> {
-    fn new(source: &'a str) -> Self { Self { source, iter: source.char_indices().peekable() } }
+    pub fn new(source: &'a str) -> Self { Self { source, iter: source.char_indices().peekable() } }
 
+    pub fn peek(&mut self) -> Option<char> {
+        self.iter.peek().map(|x| x.1)
+    }
+    
+    pub fn next(&mut self) -> Option<char> {
+        self.iter.next().map(|x| x.1)
+    }
+    
     pub fn skip_while_eq(&mut self, c: char) -> usize {
         let mut result = 0;
         loop {
@@ -128,6 +136,17 @@ impl<'a> Iter<'a> {
         }
     }
 
+    pub fn skip_whitespace_new_line(&mut self) {
+        loop {
+            match self.iter.peek() {
+                Some((_, ' ' | '\t' | '\n')) => {
+                    self.iter.next();
+                },
+                Some(_) | None => return,
+            }
+        }
+    }
+    
     pub fn skip_whitespace_min_one(&mut self) -> bool {
         let mut any = false;
         loop {
@@ -156,7 +175,58 @@ impl<'a> Iter<'a> {
 
     pub fn ended(&mut self) -> bool { self.iter.peek().is_none() }
 
-    fn get_str(&mut self) -> &str {
+    pub fn get_str_until_unescaped(&mut self, c: char) -> Option<&'a str> {
+        let start = self.iter.peek()?.0;
+        let mut escape = false;
+        loop {
+            match self.iter.next()? {
+                (end, current) if !escape && current == c =>
+                    return Some(unsafe { self.source.get_unchecked(start..end) }),
+                (_, current) => escape = current == '\\' && !escape, 
+            }
+        }
+    }
+
+    pub fn get_str_until_unescaped_without(&mut self, expected: char, illegal: char) -> Option<&'a str> {
+        let start = self.iter.peek()?.0;
+        let mut escape = false;
+        loop {
+            match self.iter.next()? {
+                (end, current) if !escape && current == expected =>
+                    return Some(unsafe { self.source.get_unchecked(start..end) }),
+                (_, current) if !escape && current == illegal => return None,
+                (_, current) => escape = current == '\\' && !escape,
+            }
+        }
+    }
+    
+    pub fn get_link_destination(&mut self) -> Option<&'a str> {
+        match self.iter.next()? {
+            (s, '<') => {
+                let mut escape = false;
+                loop {
+                    match self.iter.next()? {
+                        (e, '>') if !escape =>
+                            return Some(unsafe { self.source.get_unchecked((s + 1)..e) }),
+                        (_, '\n') => return None,
+                        (_, c) => escape = c == '\\' && !escape,
+                    }
+                }
+            },
+            (s, _) => loop {
+                match self.iter.peek() {
+                    Some(&(e, ' ' | '\t' | '\n')) =>
+                        return Some(unsafe { self.source.get_unchecked(s..e) }),
+                    None =>
+                        return Some(unsafe { self.source.get_unchecked(s..) }),
+                    Some((_, c)) if c.is_ascii_control() => return None,
+                    Some(_) => _ = self.iter.next(),
+                }
+            }
+        }
+    }
+    
+    pub fn get_str(&mut self) -> &'a str {
         match self.iter.peek() {
             Some(&(i, _)) => unsafe { self.source.get_unchecked(i..) },
             None => "",

@@ -7,24 +7,23 @@ use crate::md_reader::temp_block::{LineResult, Links, SkipIndent, TempBlock};
 pub struct BlockQuote {
     pub current: Box<TempBlock>,
     finished: Vec<TempBlock>,
-    pub links: Links,
 }
 
 impl BlockQuote {
     pub fn new(line: &SkipIndent) -> Self {
         let mut content = line.skip_indent_rest();
         content.inspect(|s| s.move_indent_capped(1));
-        let (current, finished, links) = TempBlock::new_empty(content);
-        Self { current: Box::new(current), finished, links }
+        let (current, finished) = TempBlock::new_empty(content);
+        Self { current: Box::new(current), finished }
     }
 
-    pub fn next(&mut self, line: SkipIndent) -> LineResult {
+    pub fn next(&mut self, line: SkipIndent, links: &mut Links) -> LineResult {
         match line.indent {
             0..=3 =>
                 if line.first == '>' {
                     let mut content = line.skip_indent_rest();
                     content.inspect(|s| s.move_indent_capped(1));
-                    self.current.next(content, &mut self.finished, &mut self.links);
+                    self.current.next(content, &mut self.finished, links);
                     LineResult::None
                 } else {
                     self.current.next_continuation(line)
@@ -32,7 +31,7 @@ impl BlockQuote {
             4.. => self.current.next_indented_continuation(line),
         }
     }
-
+    
     pub fn finish(self) -> Block {
         Block::BlockQuote(
             self.finished

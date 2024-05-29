@@ -265,7 +265,7 @@ pub struct Cell(pub Attr, pub Alignment, pub RowSpan, pub ColSpan, pub Vec<Block
 impl Cell {
     #[must_use]
     pub fn new(content: String) -> Self {
-        let inlines = InlineParser::parse_line(content);
+        let inlines = InlineParser::parse_lines(&content);
         Self(
             attr_empty(),
             Alignment::Default,

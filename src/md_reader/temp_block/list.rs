@@ -84,12 +84,12 @@ impl List {
         Item::check_number_paragraph(line)
     }
 
-    pub fn next(&mut self, mut line: SkipIndent) -> LineResult {
+    pub fn next(&mut self, mut line: SkipIndent, links: &mut Links) -> LineResult {
         if let Some(current) = self.current.as_mut()
             && line.indent >= current.indent + current.width
         {
             line.move_indent(current.indent + current.width);
-            current.next_line(line);
+            current.next_line(line, links);
             LineResult::None
         } else if line.indent > 3 {
             match self.current.as_mut() {
@@ -173,8 +173,8 @@ impl List {
         }
     }
 
-    pub fn next_blank(&mut self, indent: usize) {
-        if self.current.as_mut().is_some_and(|i| i.next_blank(indent)) {
+    pub fn next_blank(&mut self, indent: usize, links: &mut Links) {
+        if self.current.as_mut().is_some_and(|i| i.next_blank(indent, links)) {
             self.items.push(self.current.take().unwrap());
         }
     }
@@ -203,7 +203,6 @@ enum CheckMatchingResult<'a> {
 #[derive(Debug)]
 pub struct Item {
     finished: Vec<TempBlock>,
-    pub links: Links,
     pub current: Box<TempBlock>,
     width: usize,
     indent: usize,
@@ -245,7 +244,6 @@ impl Item {
     fn new_empty(width: usize, indent: usize) -> Self {
         Self {
             finished: Vec::new(),
-            links: Links::new(),
             current: Box::new(TempBlock::Empty),
             width,
             indent,
@@ -255,15 +253,14 @@ impl Item {
     }
 
     fn new(width: usize, indent: usize, content: SkipIndent) -> Self {
-        let (current, finished, links) = TempBlock::new_empty_known_indent(content);
-        Self { finished, links, current: Box::new(current), width, indent, gap: false, loose: false }
+        let (current, finished) = TempBlock::new_empty_known_indent(content);
+        Self { finished, current: Box::new(current), width, indent, gap: false, loose: false }
     }
 
     fn new_code(width: usize, indent: usize, mut content: SkipIndent) -> Self {
         content.move_indent(1);
         Self {
             finished: Vec::new(),
-            links: Links::new(),
             current: Box::new(IndentedCodeBlock::new(content).into()),
             width,
             indent,
@@ -427,8 +424,8 @@ impl Item {
         }
     }
 
-    fn next_line(&mut self, line: SkipIndent) {
-        let result = self.current.next_line(line);
+    fn next_line(&mut self, line: SkipIndent, links: &mut Links) {
+        let result = self.current.next_line(line, links);
         if !self.loose
             && (result.is_done_or_new() && self.gap
                 || result.is_done_self_and_new_or_other()
@@ -437,17 +434,17 @@ impl Item {
             self.loose = true;
         }
         self.gap = false;
-        self.current.apply_result(result, &mut self.finished, &mut self.links);
+        self.current.apply_result(result, &mut self.finished, links);
     }
 
-    fn next_blank(&mut self, indent: usize) -> bool {
+    fn next_blank(&mut self, indent: usize, links: &mut Links) -> bool {
         if self.current.is_empty() && self.finished.is_empty() {
             return true;
         }
         let result;
         (result, self.gap) =
-            self.current.next_blank(indent.saturating_sub(self.indent + self.width));
-        self.current.apply_result(result, &mut self.finished, &mut self.links);
+            self.current.next_blank(indent.saturating_sub(self.indent + self.width), links);
+        self.current.apply_result(result, &mut self.finished, links);
         false
     }
 
@@ -467,5 +464,5 @@ impl Item {
             .collect()
         }
     }
-    
+
 }

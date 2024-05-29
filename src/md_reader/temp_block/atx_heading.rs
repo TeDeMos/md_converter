@@ -33,6 +33,6 @@ impl AtxHeading {
     }
 
     pub fn finish(self) -> Block {
-        Block::new_header(self.level, InlineParser::parse_line(self.content))
+        Block::new_header(self.level, InlineParser::parse_lines(&self.content))
     }
 }

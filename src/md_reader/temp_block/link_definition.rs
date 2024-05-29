@@ -1,13 +1,4 @@
 use std::collections::HashMap;
-use crate::md_reader::temp_block::iters::SkipIndent;
-use crate::md_reader::temp_block::{LineResult};
-
-#[derive(Debug)]
-pub struct LinkDefinition {
-    pub stripped: String,
-    pub url: String,
-    pub title: Option<String>,
-}
 
 #[derive(Debug)]
 pub struct Link {
@@ -15,13 +6,9 @@ pub struct Link {
     pub title: Option<String>,
 }
 
-impl LinkDefinition {
-    pub fn next(&mut self, line: SkipIndent) -> LineResult {
-        todo!()
-    }
-
-    pub fn next_blank(&mut self) -> (LineResult, bool) {
-        todo!()
+impl Link {
+    fn new(url: &str, title: Option<&str>) -> Self {
+        Self { url: url.to_owned(), title: title.map(str::to_owned) }
     }
 }
 
@@ -31,22 +18,29 @@ pub struct Links(HashMap<String, Link>);
 impl Links {
     pub fn new() -> Self { Self(HashMap::new()) }
 
-    pub fn add(&mut self, stripped: String, link: Link) {
-        self.0.entry(stripped).or_insert(link);
-    }
-
-    pub fn add_from(&mut self, link: LinkDefinition) {
-        self.0.entry(link.stripped).or_insert_with(|| Link { url: link.url, title: link.title });
-    }
-
-    pub fn extend(&mut self, new: Self) {
-        for (k, v) in new.0 {
-            self.add(k, v);
+    pub fn strip(key: &str) -> String {
+        let mut space = false;
+        let mut result = String::new();
+        for c in key.trim().chars() {
+            match c {
+                ' ' | '\t' | '\n' => space = true,
+                c => {
+                    if space {
+                        space = false;
+                        result.push(' ');
+                    }
+                    for c in c.to_lowercase() {
+                        result.push(c);
+                    }
+                }
+            }
         }
+        result
     }
-    
-    pub fn take(&mut self) -> Self {
-        std::mem::take(self)
-    }
-}
 
+    pub fn add_new(&mut self, unstripped: &str, destination: &str, title: Option<&str>) {
+        self.0.entry(Self::strip(unstripped)).or_insert_with(|| Link::new(destination, title));
+    }
+
+    pub fn get(&self, stripped: &str) -> Option<&Link> { self.0.get(stripped) }
+}

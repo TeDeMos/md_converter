@@ -1,21 +1,24 @@
 use crate::ast::Block;
 use crate::inline_parser::InlineParser;
+use crate::md_reader::temp_block::iters::Iter;
 use crate::md_reader::temp_block::{
-    AtxHeading, BlockQuote, CheckOrSetextResult, CheckResult, FencedCodeBlock, LineResult, List,
-    NewResult, SkipIndent, Table, TempBlock, ThematicBreak,
+    AtxHeading, BlockQuote, CheckOrSetextResult, CheckResult, FencedCodeBlock, LineResult, Links,
+    List, NewResult, SkipIndent, Table, TempBlock, ThematicBreak,
 };
 
 #[derive(Debug)]
 pub struct Paragraph {
-    pub lines: Vec<String>,
+    pub content: String,
     pub table_header_length: usize,
+    line_start: usize,
     setext: usize,
 }
 
 impl Paragraph {
     pub fn new(line: &SkipIndent) -> Self {
         Self {
-            lines: vec![line.line.to_owned()],
+            content: line.line.to_owned(),
+            line_start: 0,
             table_header_length: Table::check_header(line.line),
             setext: 0,
         }
@@ -56,13 +59,77 @@ impl Paragraph {
         })
     }
 
-    pub fn next_indented_continuation(&mut self, line: &SkipIndent) { self.push_no_checks(line); }
+    pub fn next_indented_continuation(&mut self, line: &SkipIndent) { self.push(line.line); }
 
-    pub fn finish(self) -> Block {
-        let parsed = InlineParser::parse_lines(&self.lines);
-        match self.setext {
-            0 => Block::Para(parsed),
-            _ => Block::new_header(self.setext, parsed),
+    pub fn add_links(&mut self, links: &mut Links) {
+        let mut iter = Iter::new(&self.content);
+        let mut changed = false;
+        let mut current = self.content.as_str();
+        loop {
+            if !iter.next_if_eq('[') {
+                break;
+            }
+            let Some(label) = iter.get_str_until_unescaped(']') else { break };
+            if label.len() > 999 || label.trim().is_empty() {
+                break;
+            }
+            if !iter.next_if_eq(':') {
+                break;
+            }
+            iter.skip_whitespace_new_line();
+            let Some(destination) = iter.get_link_destination() else { break };
+            let whitespace = iter.skip_whitespace_min_one();
+            let new_line = iter.next_if_eq('\n');
+            let (title, check) = match iter.peek() {
+                Some(c @ ('"' | '\'')) if whitespace || new_line => {
+                    iter.next();
+                    (iter.get_str_until_unescaped(c), true)
+                },
+                Some('(') if whitespace || new_line => {
+                    iter.next();
+                    (iter.get_str_until_unescaped_without(')', '('), true)
+                },
+                Some(_) =>
+                    if new_line {
+                        (None, false)
+                    } else {
+                        break;
+                    },
+                None => (None, false),
+            };
+            if check && title.is_none() {
+                break;
+            }
+            if title.is_some() {
+                iter.skip_whitespace();
+                if !matches!(iter.next(), Some('\n') | None) {
+                    break;
+                }
+            }
+            links.add_new(label, destination, title);
+            current = iter.get_str();
+            changed = true;
+        }
+        #[allow(clippy::assigning_clones)]
+        // clone_into not possible because current is the reference to content
+        if changed {
+            self.content = current.to_owned();
+        }
+    }
+
+    pub fn get_last_line(&self) -> &str { unsafe { self.content.get_unchecked(self.line_start..) } }
+
+    pub fn trim_last_line(&mut self) { self.content.truncate(self.line_start.saturating_sub(1)); }
+
+    pub fn finish(self) -> Option<Block> {
+        if self.content.is_empty() {
+            None
+        } else {
+            let parsed = InlineParser::parse_lines(&self.content);
+            Some(match self.setext {
+                0 => Block::Para(parsed),
+                _ => Block::new_header(self.setext, parsed),
+            })
         }
     }
 
@@ -85,13 +152,13 @@ impl Paragraph {
     fn push_full_check(&mut self, line: SkipIndent) -> LineResult {
         match Table::check(line, self) {
             NewResult::New(b) =>
-                if self.lines.is_empty() {
+                if self.line_start == 0 {
                     LineResult::New(b)
                 } else {
                     LineResult::DoneSelfAndNew(b)
                 },
             NewResult::Text(t) => {
-                self.lines.push(t.line.to_owned());
+                self.push(t.line);
                 self.table_header_length = Table::check_header(t.line);
                 LineResult::None
             },
@@ -99,14 +166,18 @@ impl Paragraph {
     }
 
     fn push_header_check(&mut self, line: &SkipIndent) {
-        self.lines.push(line.line.to_owned());
+        self.push(line.line);
         self.table_header_length = Table::check_header(line.line);
     }
 
     fn push_header_no_indent_check(&mut self, line: &SkipIndent) {
-        self.lines.push(line.line.to_owned());
+        self.push(line.line);
         self.table_header_length = if line.indent > 0 { 0 } else { Table::check_header(line.line) };
     }
 
-    fn push_no_checks(&mut self, line: &SkipIndent) { self.lines.push(line.line.to_owned()); }
+    fn push(&mut self, line: &str) {
+        self.content.push('\n');
+        self.line_start = self.content.len();
+        self.content.push_str(line.trim_end());
+    }
 }

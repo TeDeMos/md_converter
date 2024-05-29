@@ -5,7 +5,6 @@ use block_quote::BlockQuote;
 use fenced_code_block::FencedCodeBlock;
 use indented_code_block::IndentedCodeBlock;
 use iters::{SkipIndent, SkipIndentResult};
-use link_definition::LinkDefinition;
 pub use link_definition::{Links, Link};
 use list::{CheckOrSetextResult, List};
 use paragraph::Paragraph;
@@ -34,7 +33,6 @@ pub enum TempBlock {
     ThematicBreak(ThematicBreak),
     IndentedCodeBlock(IndentedCodeBlock),
     FencedCodeBlock(FencedCodeBlock),
-    LinkDefinition(LinkDefinition),
     Table(Table),
     BlockQuote(BlockQuote),
     List(List),
@@ -47,35 +45,33 @@ impl TempBlock {
 
     fn next(&mut self, line: SkipIndentResult, finished: &mut Vec<Self>, links: &mut Links) {
         let result = match line {
-            SkipIndentResult::Line(line) => self.next_line(line),
-            SkipIndentResult::Blank(i) => self.next_blank(i).0,
+            SkipIndentResult::Line(line) => self.next_line(line, links),
+            SkipIndentResult::Blank(i) => self.next_blank(i, links).0,
         };
         self.apply_result(result, finished, links);
     }
 
-    fn next_line(&mut self, line: SkipIndent) -> LineResult {
+    fn next_line(&mut self, line: SkipIndent, links: &mut Links) -> LineResult {
         match self {
             Self::Empty => Self::empty_next_line(line),
             Self::Paragraph(p) => p.next(line),
             Self::IndentedCodeBlock(i) => i.next(line),
             Self::FencedCodeBlock(f) => f.next(line),
             Self::Table(t) => t.next(line),
-            Self::LinkDefinition(l) => l.next(line),
-            Self::BlockQuote(b) => b.next(line),
-            Self::List(l) => l.next(line),
+            Self::BlockQuote(b) => b.next(line, links),
+            Self::List(l) => l.next(line, links),
             Self::AtxHeading(_) | Self::ThematicBreak(_) => unreachable!(),
         }
     }
 
-    fn next_blank(&mut self, indent: usize) -> (LineResult, bool) {
+    fn next_blank(&mut self, indent: usize, links: &mut Links) -> (LineResult, bool) {
         match self {
             Self::Empty => return (LineResult::None, true),
             Self::Paragraph(_) | Self::Table(_) | Self::BlockQuote(_) =>
                 return (LineResult::DoneSelf, true),
             Self::IndentedCodeBlock(i) => i.push_blank(indent),
             Self::FencedCodeBlock(f) => f.push_blank(indent),
-            Self::LinkDefinition(l) => return l.next_blank(),
-            Self::List(l) => l.next_blank(indent),
+            Self::List(l) => l.next_blank(indent, links),
             Self::AtxHeading(_) | Self::ThematicBreak(_) => unreachable!(),
         }
         (LineResult::None, false)
@@ -102,7 +98,7 @@ impl TempBlock {
         }
     }
 
-    fn apply_result(&mut self, result: LineResult, finished: &mut Vec<Self>, links: &mut Links) {
+    fn apply_result_no_links(&mut self, result: LineResult, finished: &mut Vec<Self>) {
         match result {
             LineResult::None => {},
             LineResult::New(new) => *self = new,
@@ -116,25 +112,44 @@ impl TempBlock {
         }
     }
 
-    fn push_self(mut self, finished: &mut Vec<Self>, links: &mut Links) {
-        match &mut self {
-            TempBlock::BlockQuote(b) => links.extend(b.links.take()),
-            TempBlock::List(l) =>
-                for i in l.iter_items_mut() {
-                    links.extend(i.links.take());
-                },
-            _ => {},
-        }
-        match self {
-            TempBlock::LinkDefinition(l) => links.add_from(l),
-            s => finished.push(s),
+    fn apply_result(&mut self, result: LineResult, finished: &mut Vec<Self>, links: &mut Links) {
+        match result {
+            LineResult::None => {},
+            LineResult::New(new) => *self = new,
+            LineResult::DoneSelf => {
+                self.finish_links(links);
+                finished.push(self.take());
+            },
+            LineResult::Done(mut block) => {
+                block.finish_links(links);
+                finished.push(block);
+            },
+            LineResult::DoneSelfAndNew(block) => {
+                self.finish_links(links);
+                finished.push(self.replace(block));
+            },
+            LineResult::DoneSelfAndOther(mut block) => {
+                self.finish_links(links);
+                block.finish_links(links);
+                finished.push(self.take());
+                finished.push(block);
+            },
         }
     }
-
+    
+    pub fn finish_links(&mut self, links: &mut Links) {
+        match self {
+            Self::Paragraph(p) => p.add_links(links),
+            Self::BlockQuote(b) => b.current.finish_links(links),
+            Self::List(List { current: Some(c), ..}) => c.current.finish_links(links),
+            _ => {},
+        }
+    }
+    
     pub fn finish(self) -> Option<Block> {
         match self {
             Self::Empty => None,
-            Self::Paragraph(p) => Some(p.finish()),
+            Self::Paragraph(p) => p.finish(),
             Self::AtxHeading(a) => Some(a.finish()),
             Self::ThematicBreak(_) => Some(ThematicBreak::finish()),
             Self::IndentedCodeBlock(i) => Some(i.finish()),
@@ -142,29 +157,26 @@ impl TempBlock {
             Self::Table(t) => Some(t.finish()),
             Self::BlockQuote(b) => Some(b.finish()),
             Self::List(l) => Some(l.finish()),
-            Self::LinkDefinition(_) => unreachable!(),
         }
     }
 
-    fn new_empty(line: SkipIndentResult) -> (Self, Vec<Self>, Links) {
+    fn new_empty(line: SkipIndentResult) -> (Self, Vec<Self>) {
         match line {
             SkipIndentResult::Line(line) => {
                 let mut new = Self::Empty;
                 let mut finished = Vec::new();
-                let mut links = Links::new();
-                new.apply_result(Self::empty_next_line(line), &mut finished, &mut links);
-                (new, finished, links)
+                new.apply_result_no_links(Self::empty_next_line(line), &mut finished);
+                (new, finished)
             },
-            SkipIndentResult::Blank(_) => (Self::Empty, Vec::new(), Links::new()),
+            SkipIndentResult::Blank(_) => (Self::Empty, Vec::new()),
         }
     }
 
-    fn new_empty_known_indent(line: SkipIndent) -> (Self, Vec<Self>, Links) {
+    fn new_empty_known_indent(line: SkipIndent) -> (Self, Vec<Self>) {
         let mut new = Self::Empty;
         let mut finished = Vec::new();
-        let mut links = Links::new();
-        new.apply_result(Self::empty_next_line_known_indent(line), &mut finished, &mut links);
-        (new, finished, links)
+        new.apply_result_no_links(Self::empty_next_line_known_indent(line), &mut finished);
+        (new, finished)
     }
 
     fn check_block(line: SkipIndent) -> CheckResult {
