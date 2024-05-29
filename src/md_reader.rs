@@ -1,11 +1,12 @@
 use std::iter;
 
+use links::Links;
 use temp_block::TempBlock;
 
 use crate::ast::Pandoc;
-use crate::md_reader::temp_block::Links;
 use crate::traits::AstReader;
 
+mod links;
 mod temp_block;
 
 pub struct MdReader;
@@ -73,7 +74,7 @@ mod tests {
         }
         assert!(results.is_empty(), "Tests {results:?} failed");
     }
-    
+
     #[test]
     fn tabs_and_precedence() { test(1, 12) }
 

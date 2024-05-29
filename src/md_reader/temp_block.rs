@@ -5,20 +5,19 @@ use block_quote::BlockQuote;
 use fenced_code_block::FencedCodeBlock;
 use indented_code_block::IndentedCodeBlock;
 use iters::{SkipIndent, SkipIndentResult};
-pub use link_definition::{Links, Link};
 use list::{CheckOrSetextResult, List};
 use paragraph::Paragraph;
 use table::Table;
 use thematic_break::ThematicBreak;
 
 use crate::ast::Block;
+use crate::md_reader::links::Links;
 
 mod atx_heading;
 mod block_quote;
 mod fenced_code_block;
 mod indented_code_block;
 mod iters;
-mod link_definition;
 mod list;
 mod paragraph;
 mod table;

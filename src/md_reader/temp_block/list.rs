@@ -5,7 +5,7 @@ use crate::md_reader::temp_block::{
     CheckResult, IndentedCodeBlock, LineResult, SkipIndent, SkipIndentResult, TempBlock,
     ThematicBreak,
 };
-use crate::md_reader::temp_block::link_definition::Links;
+use crate::md_reader::Links;
 
 #[derive(Debug)]
 pub struct List {
