@@ -53,7 +53,7 @@ impl Table {
         })
     }
 
-    pub fn finish(self) -> Block { Block::new_table(self.rows, self.alignments, self.size) }
+    pub fn finish(self) -> Block { Block::new_table(self.rows, self.alignments) }
 
     pub fn check_header(line: &str) -> usize {
         let mut iter = line.chars();
