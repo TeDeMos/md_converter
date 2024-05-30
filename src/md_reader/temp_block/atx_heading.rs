@@ -1,14 +1,19 @@
 use crate::ast::Block;
 use crate::inline_parser::InlineParser;
-use crate::md_reader::temp_block::{CheckResult, SkipIndent};
+use crate::md_reader::iters::SkipIndent;
+use crate::md_reader::temp_block::CheckResult;
 
+/// Struct representing a finished atx heading
 #[derive(Debug)]
 pub struct AtxHeading {
+    /// Level of the heading
     level: usize,
+    /// Heading content
     content: String,
 }
 
 impl AtxHeading {
+    /// Checks if the line is an atx heading assuming the first char was a `'#`'
     pub fn check(line: SkipIndent) -> CheckResult {
         let mut iter = line.iter_rest();
         let count = 1 + iter.skip_while_eq('#');
@@ -32,6 +37,7 @@ impl AtxHeading {
         CheckResult::Done(Self { level: count, content }.into())
     }
 
+    /// Finishes a heading into a [`Block`] by parsing the content
     pub fn finish(self) -> Block {
         Block::new_header(self.level, InlineParser::parse_lines(&self.content))
     }

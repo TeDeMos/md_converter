@@ -1,7 +1,8 @@
 use std::iter;
 
 use crate::ast::Block;
-use crate::md_reader::temp_block::{LineResult, Links, SkipIndent, TempBlock};
+use crate::md_reader::iters::SkipIndent;
+use crate::md_reader::temp_block::{LineResult, Links, TempBlock};
 
 #[derive(Debug)]
 pub struct BlockQuote {

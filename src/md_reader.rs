@@ -1,3 +1,5 @@
+//! Module containing the [`MdReader`] type used for parsing GitHub Flavoured Markdown
+
 use std::iter;
 
 use links::Links;
@@ -6,9 +8,11 @@ use temp_block::TempBlock;
 use crate::ast::Pandoc;
 use crate::traits::AstReader;
 
+mod iters;
 mod links;
 mod temp_block;
 
+/// Struct used for parsing GitHub Flavoured Markdown into the [`Pandoc`] type
 pub struct MdReader;
 
 impl AstReader for MdReader {

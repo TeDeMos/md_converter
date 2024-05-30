@@ -1,8 +1,9 @@
 use std::iter;
 
 use crate::ast::{new_list_attributes, Block};
+use crate::md_reader::iters::SkipIndent;
 use crate::md_reader::temp_block::{
-    CheckResult, IndentedCodeBlock, LineResult, SkipIndent, SkipIndentResult, TempBlock,
+    CheckResult, IndentedCodeBlock, LineResult, SkipIndentResult, TempBlock,
     ThematicBreak,
 };
 use crate::md_reader::Links;
@@ -189,10 +190,6 @@ impl List {
                 Block::OrderedList(new_list_attributes(starting, closing), done),
         }
     }
-
-    pub fn iter_items_mut(&mut self) -> impl Iterator<Item = &mut Item> {
-        self.items.iter_mut().chain(self.current.as_mut())
-    }
 }
 
 enum CheckMatchingResult<'a> {
@@ -212,7 +209,7 @@ pub struct Item {
 
 pub enum CheckOrSetextResult<'a> {
     Check(CheckResult<'a>),
-    Setext,
+    Setext(usize),
 }
 
 enum NewItemResult<'a> {
@@ -310,7 +307,7 @@ impl Item {
                         List::new(item, ListType::Unordered('-')).into(),
                     ))
                 },
-            SkipIndentResult::Blank(_) => CheckOrSetextResult::Setext,
+            SkipIndentResult::Blank(_) => CheckOrSetextResult::Setext(1),
         }
     }
 
@@ -407,20 +404,23 @@ impl Item {
     ) -> CheckOrSetextResult<'a> {
         let mut space = false;
         let mut thematic = false;
+        let mut count = 1;
         for c in rest.line.chars() {
             match c {
                 ' ' | '\t' => space = true,
-                '-' =>
+                '-' => {
                     if space {
                         thematic = true;
-                    },
+                    }
+                    count += 1;
+            },
                 _ => return CheckOrSetextResult::Check(CheckResult::Text(line)),
             }
         }
         if thematic {
             CheckOrSetextResult::Check(CheckResult::Done(ThematicBreak.into()))
         } else {
-            CheckOrSetextResult::Setext
+            CheckOrSetextResult::Setext(count)
         }
     }
 

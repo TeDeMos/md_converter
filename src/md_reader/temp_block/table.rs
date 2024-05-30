@@ -1,5 +1,6 @@
 use crate::ast::{Alignment, Block};
-use crate::md_reader::temp_block::{LineResult, NewResult, Paragraph, SkipIndent, TempBlock};
+use crate::md_reader::iters::SkipIndent;
+use crate::md_reader::temp_block::{LineResult, NewResult, Paragraph, TempBlock};
 
 #[derive(Debug)]
 pub struct Table {

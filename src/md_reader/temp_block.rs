@@ -1,28 +1,27 @@
-use derive_more::From;
-
 use atx_heading::AtxHeading;
 use block_quote::BlockQuote;
+use derive_more::From;
 use fenced_code_block::FencedCodeBlock;
 use indented_code_block::IndentedCodeBlock;
-use iters::{SkipIndent, SkipIndentResult};
 use list::{CheckOrSetextResult, List};
 use paragraph::Paragraph;
 use table::Table;
 use thematic_break::ThematicBreak;
 
 use crate::ast::Block;
-use crate::md_reader::links::Links;
+use crate::md_reader::iters::{SkipIndent, SkipIndentResult};
+use crate::md_reader::Links;
 
 mod atx_heading;
 mod block_quote;
 mod fenced_code_block;
 mod indented_code_block;
-mod iters;
 mod list;
 mod paragraph;
 mod table;
 mod thematic_break;
 
+/// Enum representing an unfinished block element
 #[derive(From, Debug, Default)]
 pub enum TempBlock {
     #[default]
@@ -38,10 +37,14 @@ pub enum TempBlock {
 }
 
 impl TempBlock {
+    /// Parses next line of a document, pushing finished blocks into the `finished` argument and
+    /// finished links into the `links` argument
     pub fn next_str(&mut self, line: &str, finished: &mut Vec<Self>, links: &mut Links) {
         self.next(SkipIndent::skip(line, 0), finished, links);
     }
 
+    /// Parses next line of a document after skipping indent pushing finished blocks into the
+    /// `finished` argument and finished links into the `links` argument
     fn next(&mut self, line: SkipIndentResult, finished: &mut Vec<Self>, links: &mut Links) {
         let result = match line {
             SkipIndentResult::Line(line) => self.next_line(line, links),
@@ -50,6 +53,11 @@ impl TempBlock {
         self.apply_result(result, finished, links);
     }
 
+    /// Parses non-blank line of a document, pushing finished links into the `links` argument.
+    /// Returns a [`LineResult`] as a result
+    /// # Panics
+    /// If the block is [`Self::AtxHeading`] or [`Self::ThematicBreak`] which are always passed
+    /// as finished
     fn next_line(&mut self, line: SkipIndent, links: &mut Links) -> LineResult {
         match self {
             Self::Empty => Self::empty_next_line(line),
@@ -63,6 +71,13 @@ impl TempBlock {
         }
     }
 
+    /// Parses a blank line of a document, pushing finished links into the `links` argument.
+    /// Returns a [`LineResult`] as a result and a [`bool`] if the blank line is a gap between
+    /// block elements or within a block element (used by [`List`] to decide if the items are loose
+    /// or not)
+    /// # Panics
+    /// If the block is [`Self::AtxHeading`] or [`Self::ThematicBreak`] which are always passed
+    /// as finished
     fn next_blank(&mut self, indent: usize, links: &mut Links) -> (LineResult, bool) {
         match self {
             Self::Empty => return (LineResult::None, true),
@@ -76,6 +91,10 @@ impl TempBlock {
         (LineResult::None, false)
     }
 
+    /// Parses non-blank line of a document as a continuation line pushing finished links into the
+    /// `links` argument. Returns a [`LineResult`] as a result. Used by [`BlockQuote`] when the line
+    /// is missing the `'>'` char or by [`List`] when the line isn't indented enough but in both
+    /// cases only if the line is indented by at most 3 spaces
     fn next_continuation(&mut self, line: SkipIndent) -> LineResult {
         match self {
             Self::Paragraph(p) => p.next_continuation(line),
@@ -85,6 +104,10 @@ impl TempBlock {
         }
     }
 
+    /// Parses non-blank line of a document as a continuation line pushing finished links into the
+    /// `links` argument. Returns a [`LineResult`] as a result. Used by [`BlockQuote`] when the line
+    /// is missing the `'>'` char or by [`List`] when the line isn't indented enough but in both
+    /// cases only if the line is indented by at least 4 spaces
     fn next_indented_continuation(&mut self, line: SkipIndent) -> LineResult {
         match self {
             Self::Paragraph(p) => {
@@ -97,6 +120,8 @@ impl TempBlock {
         }
     }
 
+    /// Applies [`LineResult`] assuming no links can be created, pushing finished blocks into the
+    /// `finished` argument. Used by [`BlockQuote`] and [`List`] when starting the first block
     fn apply_result_no_links(&mut self, result: LineResult, finished: &mut Vec<Self>) {
         match result {
             LineResult::None => {},
@@ -111,6 +136,8 @@ impl TempBlock {
         }
     }
 
+    /// Applies [`LineResult`] pushing finished blocks into the `finished` argument and finished
+    /// links into the [`links`] argument
     fn apply_result(&mut self, result: LineResult, finished: &mut Vec<Self>, links: &mut Links) {
         match result {
             LineResult::None => {},
@@ -135,16 +162,18 @@ impl TempBlock {
             },
         }
     }
-    
+
+    /// Extracts links from a finished block, pushing them into the `links` argument.
     pub fn finish_links(&mut self, links: &mut Links) {
         match self {
             Self::Paragraph(p) => p.add_links(links),
             Self::BlockQuote(b) => b.current.finish_links(links),
-            Self::List(List { current: Some(c), ..}) => c.current.finish_links(links),
+            Self::List(List { current: Some(c), .. }) => c.current.finish_links(links),
             _ => {},
         }
     }
-    
+
+    /// Finishes block into a [`Block`] 
     pub fn finish(self) -> Option<Block> {
         match self {
             Self::Empty => None,
@@ -159,6 +188,8 @@ impl TempBlock {
         }
     }
 
+    /// Creates a new block from a line after skipping indent. Used by [`BlockQuote`] when creating
+    /// the first block. Returns current block and finished blocks
     fn new_empty(line: SkipIndentResult) -> (Self, Vec<Self>) {
         match line {
             SkipIndentResult::Line(line) => {
@@ -171,6 +202,8 @@ impl TempBlock {
         }
     }
 
+    /// Creates a new block from a non-blank line after skipping indent. Used by [`List`] when
+    /// creating the first block. Returns current block and finished blocks
     fn new_empty_known_indent(line: SkipIndent) -> (Self, Vec<Self>) {
         let mut new = Self::Empty;
         let mut finished = Vec::new();
@@ -178,6 +211,7 @@ impl TempBlock {
         (new, finished)
     }
 
+    /// Checks if a new block can be started from a non-blank line. Returns a [`CheckResult`]
     fn check_block(line: SkipIndent) -> CheckResult {
         match line.indent {
             0..=3 => Self::check_block_known_indent(line),
@@ -185,6 +219,8 @@ impl TempBlock {
         }
     }
 
+    /// Checks if a new block can be started from a non-blank line assuming the indent is at most 3
+    /// spaces. Returns a [`CheckResult`]
     fn check_block_known_indent(line: SkipIndent) -> CheckResult {
         match line.first {
             '#' => AtxHeading::check(line),
@@ -198,20 +234,27 @@ impl TempBlock {
         }
     }
 
+    /// Parses next non-blank line of the document when the current block is [`Self::Empty`]
     fn empty_next_line(line: SkipIndent) -> LineResult {
         Self::check_block(line).into_line_result_paragraph(false)
     }
 
+    /// Parses next non-blank line indented of the document when it's indented at most 3 spaces and
+    /// the current block is [`Self::Empty`]
     fn empty_next_line_known_indent(line: SkipIndent) -> LineResult {
         Self::check_block_known_indent(line).into_line_result_paragraph(false)
     }
 
+    /// Replaces self with the default value ([`Self::Empty`]), returning the previous value
     fn take(&mut self) -> Self { std::mem::take(self) }
 
+    /// Replaces self with the new value, returning the previous value
     fn replace(&mut self, new: Self) -> Self { std::mem::replace(self, new) }
 
+    /// Returns whether the current value is [`Self::Empty`]
     const fn is_empty(&self) -> bool { matches!(self, Self::Empty) }
 
+    /// Returns a reference to the [`List`] if the current value is [`Self::List`]
     const fn as_list(&self) -> Option<&List> {
         match self {
             Self::List(l) => Some(l),
@@ -220,31 +263,48 @@ impl TempBlock {
     }
 }
 
+/// Enum representing every possible result after parsing a line of a document
 pub enum LineResult {
+    /// Line was consumed and nothing changed
     None,
+    /// Current block is finished, no new blocks started
     DoneSelf,
+    /// New block is started, current is ignored
     New(TempBlock),
+    /// New block is finished, current is ignored
     Done(TempBlock),
+    /// Current block is finished and a new block is started
     DoneSelfAndNew(TempBlock),
+    /// Current block and a new block are both finished
     DoneSelfAndOther(TempBlock),
 }
 
 impl LineResult {
-    pub const fn is_done_or_new(&self) -> bool { matches!(self, Self::New(_) | Self::Done(_)) }
+    /// Returns whether current variant is [`Self::New`] or [`Self::Done`]
+    const fn is_done_or_new(&self) -> bool { matches!(self, Self::New(_) | Self::Done(_)) }
 
-    pub const fn is_done_self_and_new_or_other(&self) -> bool {
+    /// Returns whether current variant is [`Self::DoneSelfAndNew`] or [`Self::DoneSelfAndOther`]
+    const fn is_done_self_and_new_or_other(&self) -> bool {
         matches!(self, Self::DoneSelfAndNew(_) | Self::DoneSelfAndOther(_))
     }
 }
 
+/// Enum representing result of checking if a new block is started or finished
 pub enum CheckResult<'a> {
+    /// New block is started
     New(TempBlock),
+    /// New block is finished
     Done(TempBlock),
+    /// No new block started, text has to be processed
     Text(SkipIndent<'a>),
 }
 
 impl<'a> CheckResult<'a> {
-    pub fn into_line_result_paragraph(self, done_self: bool) -> LineResult {
+    /// Converts [`CheckResult`] into a [`LineResult`]. Text is converted into a new [`Paragraph`].
+    /// New block is converted into [`LineResult::New`] or [`LineResult::DoneSelfAndNew`] depending
+    /// on the `done_self` argument. Done block is converted into [`LineResult::Done`] or
+    /// [`LineResult::DoneSelfAndOther`] depending on the `done_self` argument.
+    fn into_line_result_paragraph(self, done_self: bool) -> LineResult {
         match (self, done_self) {
             (CheckResult::New(b), false) => LineResult::New(b),
             (CheckResult::New(b), true) => LineResult::DoneSelfAndNew(b),
@@ -255,7 +315,12 @@ impl<'a> CheckResult<'a> {
         }
     }
 
-    pub fn into_line_result<F>(self, done_self: bool, text_function: F) -> LineResult
+    /// Converts [`CheckResult`] into a [`LineResult`]. Text is converted into a [`LineResult`] with
+    /// the given `text_function` argument regardless of the `done_self` argument. New block is
+    /// converted into [`LineResult::New`] or [`LineResult::DoneSelfAndNew`] depending on the
+    /// `done_self` argument. Done block is converted into [`LineResult::Done`] or
+    /// [`LineResult::DoneSelfAndOther`] depending on the `done_self` argument.
+    fn into_line_result<F>(self, done_self: bool, text_function: F) -> LineResult
     where F: FnOnce(SkipIndent<'a>) -> LineResult {
         match (self, done_self) {
             (CheckResult::New(b), false) => LineResult::New(b),
@@ -267,7 +332,8 @@ impl<'a> CheckResult<'a> {
     }
 }
 
-pub enum NewResult<'a> {
+/// Enum representing result of checking if a new block is started
+enum NewResult<'a> {
     New(TempBlock),
     Text(SkipIndent<'a>),
 }

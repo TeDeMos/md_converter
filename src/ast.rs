@@ -86,8 +86,8 @@ impl Block {
     }
 
     /// Creates a table with the amount of columns given by the length of the `alignments`
-    /// parameter. Each column will have a default [`ColWidth`]. Content is given by the `rows`
-    /// parameter. Each row is defined by a list of [`String`] elements, each representing one
+    /// argument. Each column will have a default [`ColWidth`]. Content is given by the `rows`
+    /// argument. Each row is defined by a list of [`String`] elements, each representing one
     /// [`Cell`]. If a row contains too many elements the excess will be ignored and if a row
     /// contains too little elements empty cells will be added. Each [`String`] is parsed as a
     /// [`Block::Plain`] element. The table will have empty [`Attr`], no [`Caption`] a single

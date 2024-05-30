@@ -1,10 +1,13 @@
 use crate::ast::Block;
-use crate::md_reader::temp_block::{CheckResult, SkipIndent};
+use crate::md_reader::iters::SkipIndent;
+use crate::md_reader::temp_block::CheckResult;
 
+/// Struct representing a finished thematic break
 #[derive(Debug)]
 pub struct ThematicBreak;
 
 impl ThematicBreak {
+    /// Checks if a line is a thematic break assuming the first char was a `'_'`
     pub fn check(line: SkipIndent) -> CheckResult {
         let mut count = 1;
         for c in line.get_rest().chars() {
@@ -21,5 +24,6 @@ impl ThematicBreak {
         }
     }
 
+    /// Finishes a thematic break into a [`Block`]
     pub const fn finish() -> Block { Block::HorizontalRule }
 }

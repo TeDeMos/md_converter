@@ -7,7 +7,7 @@
 
 #![feature(let_chains, unwrap_infallible, never_type, if_let_guard)]
 #![warn(clippy::pedantic, clippy::nursery)]
-#![deny(dead_code)]
+//#![deny(dead_code)]
 #![warn(missing_docs)]
 
 pub mod ast;
