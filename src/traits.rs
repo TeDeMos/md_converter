@@ -1,6 +1,6 @@
+use crate::ast::Pandoc;
 use std::collections::HashMap;
 use std::error::Error;
-use crate::ast::Pandoc;
 
 pub trait AstReader {
     type ReadError: Error;
@@ -13,4 +13,3 @@ pub trait AstWriter {
 
     fn write(self, ast: Pandoc) -> Result<String, Self::WriteError>;
 }
-

@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
 
-use clap::{Arg, ArgAction, Command};
 use clap::builder::PossibleValuesParser;
+use clap::{Arg, ArgAction, Command};
 
 use md_converter::ast::Pandoc;
 use md_converter::latex_writer::LatexWriter;

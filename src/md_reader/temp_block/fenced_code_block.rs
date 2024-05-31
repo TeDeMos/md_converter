@@ -80,7 +80,11 @@ impl FencedCodeBlock {
         if let Some(n) = self.info.find(' ') {
             self.info.truncate(n);
         }
-        let info = if self.info.is_empty() { Vec::new() } else { vec![self.info] };
+        let info = if self.info.is_empty() {
+            Vec::new()
+        } else {
+            vec![self.info]
+        };
         Block::CodeBlock((String::new(), info, Vec::new()), self.content)
     }
 }

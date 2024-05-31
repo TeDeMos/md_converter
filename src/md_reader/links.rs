@@ -8,7 +8,10 @@ pub struct Link {
 
 impl Link {
     fn new(url: &str, title: Option<&str>) -> Self {
-        Self { url: url.to_owned(), title: title.map(str::to_owned) }
+        Self {
+            url: url.to_owned(),
+            title: title.map(str::to_owned),
+        }
     }
 }
 
@@ -16,7 +19,9 @@ impl Link {
 pub struct Links(HashMap<String, Link>);
 
 impl Links {
-    pub fn new() -> Self { Self(HashMap::new()) }
+    pub fn new() -> Self {
+        Self(HashMap::new())
+    }
 
     pub fn strip(key: &str) -> String {
         let mut space = false;
@@ -39,8 +44,12 @@ impl Links {
     }
 
     pub fn add_new(&mut self, unstripped: &str, destination: &str, title: Option<&str>) {
-        self.0.entry(Self::strip(unstripped)).or_insert_with(|| Link::new(destination, title));
+        self.0
+            .entry(Self::strip(unstripped))
+            .or_insert_with(|| Link::new(destination, title));
     }
 
-    pub fn get(&self, stripped: &str) -> Option<&Link> { self.0.get(stripped) }
+    pub fn get(&self, stripped: &str) -> Option<&Link> {
+        self.0.get(stripped)
+    }
 }

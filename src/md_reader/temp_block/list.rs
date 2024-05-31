@@ -36,7 +36,12 @@ struct Ordered {
 impl List {
     /// Creates a new list with one given open [`Item`] and [`ListType`]
     fn new(current: Item, list_type: ListType) -> Self {
-        Self { list_type, items: Vec::new(), current: Some(current), loose: false }
+        Self {
+            list_type,
+            items: Vec::new(),
+            current: Some(current),
+            loose: false,
+        }
     }
 
     /// Checks if the line is the beginning of a list assuming the first char is a `'*'` or a `'-'`
@@ -102,21 +107,22 @@ impl List {
                     NewItemResult::New(i) => {
                         self.add_item(i, links);
                         return LineResult::None;
-                    },
+                    }
                     NewItemResult::Text(s) => s,
                 },
                 ListType::Unordered(c) if line.first == *c => match Item::check_star_dash(line) {
                     NewItemBreakResult::New(i) => {
                         self.add_item(i, links);
                         return LineResult::None;
-                    },
-                    NewItemBreakResult::Break =>
-                        return LineResult::DoneSelfAndOther(ThematicBreak.into()),
+                    }
+                    NewItemBreakResult::Break => {
+                        return LineResult::DoneSelfAndOther(ThematicBreak.into())
+                    }
                     NewItemBreakResult::Text(s) => s,
                 },
-                ListType::Ordered(Ordered { closing, .. }) if line.first.is_ascii_digit() =>
+                ListType::Ordered(Ordered { closing, .. }) if line.first.is_ascii_digit() => {
                     match Item::check_number(line) {
-                        NewOrderedItemResult::New(i, o) =>
+                        NewOrderedItemResult::New(i, o) => {
                             return if o.closing == *closing {
                                 self.add_item(i, links);
                                 LineResult::None
@@ -124,9 +130,11 @@ impl List {
                                 LineResult::DoneSelfAndNew(
                                     Self::new(i, ListType::Ordered(o)).into(),
                                 )
-                            },
+                            }
+                        }
                         NewOrderedItemResult::Text(s) => s,
-                    },
+                    }
+                }
                 _ => line,
             };
             match self.current.as_mut() {
@@ -138,7 +146,11 @@ impl List {
 
     /// Parses a blank line of a document
     pub fn next_blank(&mut self, indent: usize, links: &mut Links) {
-        if self.current.as_mut().is_some_and(|i| i.next_blank(indent, links)) {
+        if self
+            .current
+            .as_mut()
+            .is_some_and(|i| i.next_blank(indent, links))
+        {
             self.items.push(self.current.take().unwrap());
         }
     }
@@ -146,12 +158,17 @@ impl List {
     /// Finishes the list into a [`Block`]
     pub fn finish(mut self) -> Block {
         self.check_end();
-        let done =
-            self.items.into_iter().chain(self.current).map(|i| i.finish(self.loose)).collect();
+        let done = self
+            .items
+            .into_iter()
+            .chain(self.current)
+            .map(|i| i.finish(self.loose))
+            .collect();
         match self.list_type {
             ListType::Unordered(_) => Block::BulletList(done),
-            ListType::Ordered(Ordered { starting, closing }) =>
-                Block::OrderedList(new_list_attributes(starting, closing), done),
+            ListType::Ordered(Ordered { starting, closing }) => {
+                Block::OrderedList(new_list_attributes(starting, closing), done)
+            }
         }
     }
 
@@ -230,8 +247,9 @@ enum NewItemBreakResult<'a> {
 impl<'a> NewItemBreakResult<'a> {
     fn into_check_result(self, c: char) -> CheckResult<'a> {
         match self {
-            NewItemBreakResult::New(i) =>
-                CheckResult::New(List::new(i, ListType::Unordered(c)).into()),
+            NewItemBreakResult::New(i) => {
+                CheckResult::New(List::new(i, ListType::Unordered(c)).into())
+            }
             NewItemBreakResult::Break => CheckResult::Done(ThematicBreak.into()),
             NewItemBreakResult::Text(s) => CheckResult::Text(s),
         }
@@ -247,8 +265,9 @@ enum NewOrderedItemResult<'a> {
 impl<'a> NewOrderedItemResult<'a> {
     fn into_check_result(self) -> CheckResult<'a> {
         match self {
-            NewOrderedItemResult::New(i, o) =>
-                CheckResult::New(List::new(i, ListType::Ordered(o)).into()),
+            NewOrderedItemResult::New(i, o) => {
+                CheckResult::New(List::new(i, ListType::Ordered(o)).into())
+            }
             NewOrderedItemResult::Text(s) => CheckResult::Text(s),
         }
     }
@@ -279,7 +298,14 @@ impl Item {
     /// Creates a new item parsing the first line into a block
     fn new(width: usize, indent: usize, content: SkipIndent) -> Self {
         let (current, finished) = TempBlock::new_empty_known_indent(content);
-        Self { finished, current: Box::new(current), width, indent, gap: false, loose: false }
+        Self {
+            finished,
+            current: Box::new(current),
+            width,
+            indent,
+            gap: false,
+            loose: false,
+        }
     }
 
     /// Creates a new item with the first block being a [`IndentedCodeBlock`]
@@ -317,7 +343,8 @@ impl Item {
     /// assuming the line either starts with a `'*'` or it starts with a `'-'` and comes after the
     /// paragraph
     fn check_star_dash_known<'a>(
-        line: SkipIndent<'a>, rest: SkipIndent<'a>,
+        line: SkipIndent<'a>,
+        rest: SkipIndent<'a>,
     ) -> NewItemBreakResult<'a> {
         if Self::check_thematic(&line, &rest) {
             NewItemBreakResult::Break
@@ -330,7 +357,7 @@ impl Item {
     /// a paragraph
     fn check_dash_paragraph(line: SkipIndent) -> CheckOrSetextResult {
         match line.skip_indent_rest() {
-            SkipIndentResult::Line(rest) =>
+            SkipIndentResult::Line(rest) => {
                 if rest.indent == 0 {
                     Self::check_thematic_setext(line, &rest)
                 } else if Self::check_thematic(&line, &rest) {
@@ -344,7 +371,8 @@ impl Item {
                     CheckOrSetextResult::Check(CheckResult::New(
                         List::new(item, ListType::Unordered('-')).into(),
                     ))
-                },
+                }
+            }
             SkipIndentResult::Blank(_) => CheckOrSetextResult::Setext(1),
         }
     }
@@ -398,11 +426,10 @@ impl Item {
                     Ordered { starting, closing },
                 ),
             },
-            SkipIndentResult::Blank(_) =>
-                NewOrderedItemResult::New(Self::new_empty(width + 2, line.indent), Ordered {
-                    starting,
-                    closing,
-                }),
+            SkipIndentResult::Blank(_) => NewOrderedItemResult::New(
+                Self::new_empty(width + 2, line.indent),
+                Ordered { starting, closing },
+            ),
         }
     }
 
@@ -413,7 +440,10 @@ impl Item {
         let Some(closing) = iter.get_closing() else {
             return CheckResult::Text(line);
         };
-        let list_type = ListType::Ordered(Ordered { starting: 1, closing });
+        let list_type = ListType::Ordered(Ordered {
+            starting: 1,
+            closing,
+        });
         match iter.skip_indent() {
             SkipIndentResult::Line(rest) => match rest.indent {
                 0 => CheckResult::Text(line),
@@ -429,7 +459,9 @@ impl Item {
     }
 
     /// Returns whether this item ends with a blank line
-    fn ends_with_blank(&self) -> bool { self.gap || self.current.ends_with_gap() }
+    fn ends_with_blank(&self) -> bool {
+        self.gap || self.current.ends_with_gap()
+    }
 
     /// Checks if a given line is a thematic break
     fn check_thematic(line: &SkipIndent, rest: &SkipIndent) -> bool {
@@ -449,7 +481,8 @@ impl Item {
 
     /// Checks if a given line is a thematic break or a setext heading underline
     fn check_thematic_setext<'a>(
-        line: SkipIndent<'a>, rest: &SkipIndent,
+        line: SkipIndent<'a>,
+        rest: &SkipIndent,
     ) -> CheckOrSetextResult<'a> {
         let mut space = false;
         let mut thematic = false;
@@ -462,7 +495,7 @@ impl Item {
                         thematic = true;
                     }
                     count += 1;
-                },
+                }
                 _ => return CheckOrSetextResult::Check(CheckResult::Text(line)),
             }
         }
@@ -493,8 +526,9 @@ impl Item {
             return true;
         }
         let result;
-        (result, self.gap) =
-            self.current.next_blank(indent.saturating_sub(self.indent + self.width), links);
+        (result, self.gap) = self
+            .current
+            .next_blank(indent.saturating_sub(self.indent + self.width), links);
         self.current.apply_result(result, &mut self.finished, links);
         false
     }

@@ -42,8 +42,10 @@ impl Table {
         }
         iter.skip_whitespace();
         if iter.ended() {
-            let mut result =
-                Self { alignments, rows: Vec::new() };
+            let mut result = Self {
+                alignments,
+                rows: Vec::new(),
+            };
             result.push(paragraph.get_last_line());
             paragraph.trim_last_line();
             NewResult::New(result.into())
@@ -61,7 +63,9 @@ impl Table {
     }
 
     /// Finishes the table into a [`Block`]
-    pub fn finish(self) -> Block { Block::new_table(self.rows, self.alignments) }
+    pub fn finish(self) -> Block {
+        Block::new_table(self.rows, self.alignments)
+    }
 
     /// Checks how many columns a table header defined by this line has
     pub fn check_header(line: &str) -> usize {
@@ -102,7 +106,7 @@ impl Table {
                         return;
                     }
                     current = String::new();
-                },
+                }
                 Some(c) => current.push(c),
             };
         }

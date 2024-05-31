@@ -10,7 +10,7 @@ pub struct IndentedCodeBlock {
     /// Whether the block has blank lines at the end (used by lists to check they are loose)
     pub ends_with_blank: bool,
     /// Index of the end of the last non-blank line
-    last_non_blank_end: usize
+    last_non_blank_end: usize,
 }
 
 impl IndentedCodeBlock {
@@ -20,7 +20,11 @@ impl IndentedCodeBlock {
         line.move_indent(4);
         let content = line.get_full();
         let last_non_blank_end = content.len();
-        Self { content, ends_with_blank: false, last_non_blank_end }
+        Self {
+            content,
+            ends_with_blank: false,
+            last_non_blank_end,
+        }
     }
 
     /// Parses next non-blank line of a document
@@ -30,7 +34,7 @@ impl IndentedCodeBlock {
             4.. => {
                 self.push(line);
                 LineResult::None
-            },
+            }
         }
     }
 
