@@ -18,7 +18,7 @@ pub struct MdReader;
 impl AstReader for MdReader {
     type ReadError = !;
 
-    fn read(source: &str) -> Result<Pandoc, Self::ReadError> {
+    fn read(self, source: &str) -> Result<Pandoc, Self::ReadError> {
         let mut current = TempBlock::default();
         let mut finished = Vec::new();
         let mut links = Links::new();
@@ -63,7 +63,7 @@ mod tests {
                 std::str::from_utf8(&child.wait_with_output().unwrap().stdout).unwrap(),
             )
             .unwrap();
-            let result = MdReader::read(e).into_ok();
+            let result = MdReader.read(e).into_ok();
             if result.blocks == expected.blocks {
                 println!("\x1b[32mExample {number} : success");
                 println!("Input:\n{e}");

@@ -1,3 +1,5 @@
+use std::error::Error;
+
 use derive_more::Display;
 
 use crate::ast::{Alignment, Block, ColSpec, Inline, Pandoc, Row, TableBody, TableHead};
@@ -9,23 +11,26 @@ pub struct LatexWriter {
     enum_level: usize,
 }
 
+impl LatexWriter {
+    pub fn new() -> Self { Self { result: String::new(), enum_level: 0 } }
+}
+
 impl AstWriter for LatexWriter {
     type WriteError = WriteError;
 
-    fn write(ast: Pandoc) -> Result<String, Self::WriteError> {
-        let mut writer = Self::default();
-        writer.push_str("\\documentclass[]{article}\n");
-        writer.push_str("\\usepackage[utf8]{inputenc}\n");
-        writer.push_str("\\usepackage[normalem]{ulem}\n");
-        writer.push_str("\\usepackage{graphicx}\n");
-        writer.push_str("\\usepackage{listings}\n");
-        writer.push_str(
+    fn write(mut self, ast: Pandoc) -> Result<String, Self::WriteError> {
+        self.push_str("\\documentclass[]{article}\n");
+        self.push_str("\\usepackage[utf8]{inputenc}\n");
+        self.push_str("\\usepackage[normalem]{ulem}\n");
+        self.push_str("\\usepackage{graphicx}\n");
+        self.push_str("\\usepackage{listings}\n");
+        self.push_str(
             "\\providecommand{\tightlist}{%\\setlength{\\itemsep}{0pt}\\setlength{\\parskip}{0pt}}",
         );
-        writer.push_str("\\begin{document}\n");
-        writer.write_blocks(ast.blocks)?;
-        writer.push_str("\n\\end{document}");
-        Ok(writer.result)
+        self.push_str("\\begin{document}\n");
+        self.write_blocks(ast.blocks)?;
+        self.push_str("\n\\end{document}");
+        Ok(self.result)
     }
 }
 
@@ -33,6 +38,8 @@ impl AstWriter for LatexWriter {
 pub enum WriteError {
     NotImplemented(&'static str),
 }
+
+impl Error for WriteError {}
 
 impl LatexWriter {
     fn push_str(&mut self, str: &str) { self.result.push_str(str) }
@@ -275,8 +282,47 @@ impl LatexWriter {
             '~' => self.push_str("\\textasciitilde{}"),
             '^' => self.push_str("\\^{}"),
             '\\' => self.push_str("\\textbackslash{}"),
-            '`' => self.push_str("\\textasciigrave{}"), //???
+            '`' => self.push_str("\\textasciigrave{}"),
             _ => self.push(c),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::ast::*;
+
+    fn get_content(document: &str) -> &str {
+        let start_pattern = "\\begin{document}\n";
+        let end_pattern = "\\end{document}";
+        let start = document.find(start_pattern).unwrap() + start_pattern.len();
+        let end = document.find(end_pattern).unwrap();
+        document[start..end].trim()
+    }
+
+    #[test]
+    fn special_chars() {
+        let p = Pandoc {
+            meta: Meta::default(),
+            blocks: vec![Block::Plain(vec![Inline::Str(String::from("&%$#_{}~^\\`"))])],
+        };
+        let result = LatexWriter::new().write(p).unwrap();
+        let content = get_content(&result);
+        let expected =
+            "\\&\\%\\$\\#\\_\\{\\}\\textasciitilde{}\\^{}\\textbackslash{}\\textasciigrave{}";
+        assert_eq!(content, expected);
+    }
+
+    #[test]
+    fn str() {
+        let p = Pandoc {
+            meta: Meta::default(),
+            blocks: vec![Block::Plain(vec![Inline::Str(String::from("str"))])],
+        };
+        let result = LatexWriter::new().write(p).unwrap();
+        let content = get_content(&result);
+        let expected = "str";
+        assert_eq!(content, expected);
     }
 }

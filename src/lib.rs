@@ -14,5 +14,7 @@ pub mod ast;
 pub mod inline_parser;
 pub mod latex_writer;
 pub mod md_reader;
+pub mod native_reader;
+pub mod native_writer;
 pub mod traits;
 pub mod typst_writer;
