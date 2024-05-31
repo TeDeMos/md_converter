@@ -1,5 +1,5 @@
 use crate::ast::{Block, Inline};
-use crate::inline_parser::InlineParser;
+use crate::md_reader::inline_parser::InlineParser;
 use crate::md_reader::iters::{Iter, SkipIndent};
 use crate::md_reader::temp_block::{
     AtxHeading, BlockQuote, CheckOrSetextResult, CheckResult, FencedCodeBlock, LineResult, Links,
@@ -49,7 +49,7 @@ impl Paragraph {
                         self.setext = 2;
                         self.setext_char_count = n;
                         return LineResult::DoneSelf;
-                    },
+                    }
                 },
                 '+' => List::check_plus_paragraph(line),
                 '1' => List::check_number_paragraph(line),
@@ -58,7 +58,7 @@ impl Paragraph {
             4.. => {
                 self.push_header_check(&line);
                 return LineResult::None;
-            },
+            }
         };
         checked.into_line_result(true, |s| self.push_full_check(s))
     }
@@ -72,7 +72,9 @@ impl Paragraph {
     }
 
     /// Parses a non-blank line of a document as a continuation line indented at least 4 spaces
-    pub fn next_indented_continuation(&mut self, line: &SkipIndent) { self.push(line.line); }
+    pub fn next_indented_continuation(&mut self, line: &SkipIndent) {
+        self.push(line.line);
+    }
 
     /// Extracts links from this paragraph adding them into the `links` argument
     pub fn add_links(&mut self, links: &mut Links) {
@@ -83,7 +85,9 @@ impl Paragraph {
             if !iter.next_if_eq('[') {
                 break;
             }
-            let Some(label) = iter.get_str_until_unescaped(']') else { break };
+            let Some(label) = iter.get_str_until_unescaped(']') else {
+                break;
+            };
             if label.len() > 999 || label.trim().is_empty() {
                 break;
             }
@@ -91,24 +95,27 @@ impl Paragraph {
                 break;
             }
             iter.skip_whitespace_new_line();
-            let Some(destination) = iter.get_link_destination() else { break };
+            let Some(destination) = iter.get_link_destination() else {
+                break;
+            };
             let whitespace = iter.skip_whitespace_min_one();
             let new_line = iter.next_if_eq('\n');
             let (title, check) = match iter.peek() {
                 Some(c @ ('"' | '\'')) if whitespace || new_line => {
                     iter.next();
                     (iter.get_str_until_unescaped(c), true)
-                },
+                }
                 Some('(') if whitespace || new_line => {
                     iter.next();
                     (iter.get_str_until_unescaped_without(')', '('), true)
-                },
-                Some(_) =>
+                }
+                Some(_) => {
                     if new_line {
                         (None, false)
                     } else {
                         break;
-                    },
+                    }
+                }
                 None => (None, false),
             };
             if check && title.is_none() {
@@ -139,7 +146,9 @@ impl Paragraph {
     }
 
     /// Trims last line and the preceding new line character
-    pub fn trim_last_line(&mut self) { self.content.truncate(self.line_start.saturating_sub(1)); }
+    pub fn trim_last_line(&mut self) {
+        self.content.truncate(self.line_start.saturating_sub(1));
+    }
 
     /// Finishes the paragraph into a [`Block`]. If the content is empty and the block would be a
     /// setext heading it becomes a paragraph with just the setext heading underline. An empty
@@ -152,7 +161,9 @@ impl Paragraph {
                 2 => "-",
                 _ => unreachable!(),
             };
-            Some(Block::Para(vec![Inline::Str(char.repeat(self.setext_char_count))]))
+            Some(Block::Para(vec![Inline::Str(
+                char.repeat(self.setext_char_count),
+            )]))
         } else {
             let parsed = InlineParser::parse_lines(&self.content);
             Some(match self.setext {
@@ -176,7 +187,7 @@ impl Paragraph {
                 None => {
                     self.setext = 1;
                     return LineResult::DoneSelf;
-                },
+                }
             }
         }
     }
@@ -185,17 +196,18 @@ impl Paragraph {
     /// not check whether the new line can be a table header.
     fn push_full_check(&mut self, line: SkipIndent) -> LineResult {
         match Table::check(line, self) {
-            NewResult::New(b) =>
+            NewResult::New(b) => {
                 if self.line_start == 0 {
                     LineResult::New(b)
                 } else {
                     LineResult::DoneSelfAndNew(b)
-                },
+                }
+            }
             NewResult::Text(t) => {
                 self.push(t.line);
                 self.table_header_length = Table::check_header(t.line);
                 LineResult::None
-            },
+            }
         }
     }
 
@@ -211,7 +223,11 @@ impl Paragraph {
     /// of bizarre continuation line edge cases
     fn push_header_no_indent_check(&mut self, line: &SkipIndent) {
         self.push(line.line);
-        self.table_header_length = if line.indent > 0 { 0 } else { Table::check_header(line.line) };
+        self.table_header_length = if line.indent > 0 {
+            0
+        } else {
+            Table::check_header(line.line)
+        };
     }
 
     /// Pushes a line without any checks

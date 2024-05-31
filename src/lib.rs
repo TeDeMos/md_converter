@@ -1,5 +1,5 @@
 //! # Library for parsing GitHub Flavoured Markdown into LaTeX and Typst
-//! 
+//!
 //! This library provides a Pandoc compatible type for representing a
 //! parsed document, traits for parsing documents into and from this
 //! type as well as implementations for a gfm reader and LaTeX and
@@ -11,7 +11,6 @@
 #![warn(missing_docs)]
 
 pub mod ast;
-pub mod inline_parser;
 pub mod latex_writer;
 pub mod md_reader;
 pub mod native_reader;
