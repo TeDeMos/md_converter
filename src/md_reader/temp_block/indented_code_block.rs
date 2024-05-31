@@ -20,11 +20,7 @@ impl IndentedCodeBlock {
         line.move_indent(4);
         let content = line.get_full();
         let last_non_blank_end = content.len();
-        Self {
-            content,
-            ends_with_blank: false,
-            last_non_blank_end,
-        }
+        Self { content, ends_with_blank: false, last_non_blank_end }
     }
 
     /// Parses next non-blank line of a document
@@ -34,7 +30,7 @@ impl IndentedCodeBlock {
             4.. => {
                 self.push(line);
                 LineResult::None
-            }
+            },
         }
     }
 

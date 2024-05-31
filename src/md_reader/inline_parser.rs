@@ -34,7 +34,8 @@ struct DelimiterStruct<'a> {
 impl<'a> DelimiterStruct<'a> {
     fn print_debug(&self) {
         println!(
-            "DelimiterStruct {{ count: {}, is_strong: {}, delimiter_char: '{}', delim_slice: \"{}\", typeof_delimiter: {:?} }}",
+            "DelimiterStruct {{ count: {}, is_strong: {}, delimiter_char: '{}', delim_slice: \
+             \"{}\", typeof_delimiter: {:?} }}",
             self.count,
             self.is_strong,
             self.delimiter_char,
@@ -42,9 +43,8 @@ impl<'a> DelimiterStruct<'a> {
             self.typeof_delimiter
         );
     }
-    fn change_slice(&mut self, new_slice: &'a str) {
-        self.delim_slice = new_slice;
-    }
+
+    fn change_slice(&mut self, new_slice: &'a str) { self.delim_slice = new_slice; }
 }
 
 #[allow(dead_code)]
@@ -96,19 +96,16 @@ impl InlineParser {
                     match iter.next() {
                         Some((_, '`')) => continue,
                         Some((e, _)) => {
-                            result.push(BacktickString {
-                                backtick_length: e - s,
-                                start_index: s,
-                            });
+                            result.push(BacktickString { backtick_length: e - s, start_index: s });
                             break;
-                        }
+                        },
                         None => {
                             result.push(BacktickString {
                                 backtick_length: paragraph.len() - s,
                                 start_index: s,
                             });
                             break;
-                        }
+                        },
                     }
                 },
                 Some(_) => continue,
@@ -128,8 +125,7 @@ impl InlineParser {
     }
 
     fn parse_backtick_string_length_vector(
-        paragraph: &str,
-        backtick_vec: Vec<BacktickString>,
+        paragraph: &str, backtick_vec: Vec<BacktickString>,
     ) -> Vec<SliceVariant> {
         let mut open_iter = backtick_vec.iter();
         let mut prev_index = 0;
@@ -137,9 +133,7 @@ impl InlineParser {
         loop {
             if let Some(c) = open_iter.next() {
                 if (c.start_index != 0) {
-                    result.push(SliceVariant::InlineSlice(
-                        &paragraph[prev_index..c.start_index],
-                    ));
+                    result.push(SliceVariant::InlineSlice(&paragraph[prev_index..c.start_index]));
                     prev_index = c.start_index;
                 }
                 let current = c;
@@ -156,9 +150,7 @@ impl InlineParser {
                 }
             } else {
                 if (prev_index != paragraph.len()) {
-                    result.push(SliceVariant::InlineSlice(
-                        &paragraph[prev_index..paragraph.len()],
-                    ));
+                    result.push(SliceVariant::InlineSlice(&paragraph[prev_index..paragraph.len()]));
                 }
                 return result;
             }
@@ -184,19 +176,16 @@ impl InlineParser {
         loop {
             match iter.next() {
                 Some(&SliceVariant::CodeSlice(x)) => {
-                    //Check if emphasis open then prepare the CODE inline
+                    // Check if emphasis open then prepare the CODE inline
                     result.push(Self::parse_code_slice(x));
-                    //println!("Code {x}");
-                }
+                    // println!("Code {x}");
+                },
                 Some(&SliceVariant::InlineSlice(x)) => {
                     delimiter_stack.append(&mut Self::parse_inline_slice(
-                        x,
-                        &mut result,
-                        &mut last_opener_star,
-                        &mut last_opener_floor,
+                        x, &mut result, &mut last_opener_star, &mut last_opener_floor,
                     ));
-                    //println!("Inline {x}");
-                }
+                    // println!("Inline {x}");
+                },
                 None => break,
             }
         }
@@ -206,12 +195,8 @@ impl InlineParser {
         //     println!("{}", x.slice);
         // }
 
-        let mut in_vec = parse_emph(
-            paragraph,
-            &mut delimiter_stack,
-            &last_opener_star,
-            &last_opener_floor,
-        );
+        let mut in_vec =
+            parse_emph(paragraph, &mut delimiter_stack, &last_opener_star, &last_opener_floor);
 
         for x in in_vec {
             print!("{}\n", x.slice);
@@ -231,10 +216,7 @@ impl InlineParser {
                 slice,
             }
         } else {
-            InlineElement {
-                element: Inline::Code(attr_empty(), result.parse().unwrap()),
-                slice,
-            }
+            InlineElement { element: Inline::Code(attr_empty(), result.parse().unwrap()), slice }
         }
     }
 
@@ -253,32 +235,27 @@ impl InlineParser {
                 Some((_, c @ ('0'..='9' | 'a'..='f' | 'A'..='F'))) => {
                     current_bonus.push(*c);
                     copy_iter.next();
-                }
-                Some((_, c @ ';')) => {
+                },
+                Some((_, c @ ';')) =>
                     if !current_bonus.is_empty() {
                         let entity_value = u32::from_str_radix(&current_bonus, 16);
                         return match entity_value {
                             Ok(x) => {
                                 copy_iter.next();
-                                (
-                                    StringOrChar::HTMLChar(char::from_u32(x).unwrap()),
-                                    copy_iter,
-                                )
-                            }
-                            Err(_) => (
-                                StringOrChar::HTMLChar(char::from_u32(0xfffd).unwrap()),
-                                copy_iter,
-                            ),
+                                (StringOrChar::HTMLChar(char::from_u32(x).unwrap()), copy_iter)
+                            },
+                            Err(_) =>
+                                (StringOrChar::HTMLChar(char::from_u32(0xfffd).unwrap()), copy_iter),
                         };
-                    }
-                }
+                    },
                 Some((_, c)) => return (StringOrChar::NoHTMLString(current_bonus), begin_iter),
-                None => {}
+                None => {},
             }
             length += 1;
         }
         return (StringOrChar::NoHTMLString(current_bonus), begin_iter);
     }
+
     fn parse_dec_entity(
         mut copy_iter: Peekable<CharIndices>,
     ) -> (StringOrChar, Peekable<CharIndices>) {
@@ -294,25 +271,19 @@ impl InlineParser {
                 Some((_, c @ ('0'..='9'))) => {
                     current_bonus.push(*c);
                     copy_iter.next();
-                }
-                Some((_, c @ ';')) => {
+                },
+                Some((_, c @ ';')) =>
                     if !current_bonus.is_empty() {
                         let entity_value = u32::from_str_radix(&*current_bonus, 10);
                         return match entity_value {
                             Ok(x) => {
                                 copy_iter.next();
-                                (
-                                    StringOrChar::HTMLChar(char::from_u32(x).unwrap()),
-                                    copy_iter,
-                                )
-                            }
-                            Err(_) => (
-                                StringOrChar::HTMLChar(char::from_u32(0xfffd).unwrap()),
-                                copy_iter,
-                            ),
+                                (StringOrChar::HTMLChar(char::from_u32(x).unwrap()), copy_iter)
+                            },
+                            Err(_) =>
+                                (StringOrChar::HTMLChar(char::from_u32(0xfffd).unwrap()), copy_iter),
                         };
-                    }
-                }
+                    },
                 Some((_, c)) => return (StringOrChar::NoHTMLString(current_bonus), begin_iter),
                 None => return (StringOrChar::NoHTMLString(current_bonus), begin_iter),
             }
@@ -320,12 +291,11 @@ impl InlineParser {
         }
         return (StringOrChar::NoHTMLString(current_bonus), begin_iter);
     }
+
     #[allow(clippy::too_many_lines)]
     fn parse_inline_slice<'a>(
-        slice: &'a str,
-        result: &mut Vec<InlineElement<'a>>,
-        last_opener_star: &mut [Option<usize>; 3],
-        last_opener_floor: &mut [Option<usize>; 3],
+        slice: &'a str, result: &mut Vec<InlineElement<'a>>,
+        last_opener_star: &mut [Option<usize>; 3], last_opener_floor: &mut [Option<usize>; 3],
     ) -> Vec<DelimiterStruct<'a>> {
         const ASCII_PUNCTUATION: [char; 26] = [
             '!', '"', '#', '%', '&', '\'', '(', ')', '*', ',', '.', '/', ':', ';', '?', '@', '[',
@@ -356,7 +326,7 @@ impl InlineParser {
                     let mut followed_by_whitespace = false;
                     let mut end_slice: usize = 0;
                     if !current.is_empty() {
-                        //reset current after push
+                        // reset current after push
                         result.push(InlineElement {
                             element: Inline::Str(current.clone()),
                             slice: &slice[current_begin as usize..start],
@@ -441,7 +411,7 @@ impl InlineParser {
                             typeof_delimiter: Potential::Closer,
                         });
                     }
-                }
+                },
                 Some((_, '\\')) => {
                     is_space_stream = false;
                     if let Some((_, peek_char)) = char_iter.next() {
@@ -451,7 +421,7 @@ impl InlineParser {
                         }
                         current.push(peek_char);
                     }
-                }
+                },
                 Some((index, '&')) => {
                     is_prev_punctuation = false;
                     let begin_index = index;
@@ -471,13 +441,13 @@ impl InlineParser {
                                     match parse_result {
                                         StringOrChar::NoHTMLString(_) => {
                                             current.push_str(&html_current);
-                                        }
+                                        },
                                         StringOrChar::HTMLChar(c) => {
                                             current.push(c);
-                                        }
+                                        },
                                     }
-                                }
-                                Some((_, _)) => {
+                                },
+                                Some((..)) => {
                                     Self::parse_dec_entity(char_iter.clone());
                                     let mut parse_result: StringOrChar;
                                     (parse_result, char_iter) =
@@ -485,25 +455,25 @@ impl InlineParser {
                                     match parse_result {
                                         StringOrChar::NoHTMLString(_) => {
                                             current.push_str(&html_current);
-                                        }
+                                        },
                                         StringOrChar::HTMLChar(c) => {
                                             if current_begin == -1 {
                                                 current_begin = begin_index as i32;
                                             }
                                             current.push(c);
-                                        }
+                                        },
                                     }
-                                }
+                                },
                                 None => {
                                     current.push_str(&html_current);
-                                }
+                                },
                             }
                             html_current = String::new();
-                        }
-                        Some((_, _)) => {}
-                        None => {}
+                        },
+                        Some((..)) => {},
+                        None => {},
                     }
-                }
+                },
                 Some((index, c)) if UNICODE_WHITESPACE.contains(&c) => {
                     is_prev_punctuation = false;
                     if !is_space_stream {
@@ -520,7 +490,7 @@ impl InlineParser {
                         current = String::new();
                         is_space_stream = true;
                     }
-                }
+                },
                 Some((index, c)) => {
                     if is_space_stream {
                         result.push(InlineElement {
@@ -536,7 +506,7 @@ impl InlineParser {
                         current_begin = index as i32;
                     }
                     current.push(c);
-                }
+                },
                 None => {
                     if current.len() != 0 {
                         result.push(InlineElement {
@@ -545,7 +515,7 @@ impl InlineParser {
                         });
                     }
                     break;
-                }
+                },
             }
             is_beginning = false;
         }
@@ -555,7 +525,7 @@ impl InlineParser {
     #[allow(clippy::too_many_lines)]
     #[must_use]
     pub fn temp_method(lines: &[String]) -> Vec<Inline> {
-        //todo
+        // todo
         let mut result = Vec::new();
         let ascii_punctuation = [
             '!', '"', '#', '%', '&', '\'', '(', ')', '*', ',', '.', '/', ':', ';', '?', '@', '[',
@@ -572,18 +542,15 @@ impl InlineParser {
             let mut start_slice_index: usize = 0;
             let mut length: u32 = 0;
             loop {
-                //Space remover
+                // Space remover
                 match char_iter.peek() {
-                    Some((_, '\t' | ' ')) => {}
+                    Some((_, '\t' | ' ')) => {},
                     Some(_) => space = false,
-                    None => {}
+                    None => {},
                 }
 
-                //HtmlEntityValue check
-                if matches!(
-                    html_entity_state,
-                    HtmlEntityState::Dec | HtmlEntityState::Hex
-                ) {
+                // HtmlEntityValue check
+                if matches!(html_entity_state, HtmlEntityState::Dec | HtmlEntityState::Hex) {
                     match char_iter.next() {
                         Some((end_index, ';')) => {
                             length = 0;
@@ -593,33 +560,33 @@ impl InlineParser {
                             );
                             match entity_value {
                                 Ok(value) => current.push(char::from_u32(value).unwrap()),
-                                Err(_) => current.push(char::from_u32(0xFFFD).unwrap()),
+                                Err(_) => current.push(char::from_u32(0xfffd).unwrap()),
                             }
                             html_entity_state = HtmlEntityState::NoState;
-                        }
+                        },
                         Some((_, _c @ ('0'..='9')))
                             if length < html_entity_state.get_entity_max_length() =>
                         {
                             length += 1;
-                        }
+                        },
                         Some((_, ('a'..='f' | 'A'..='F')))
                             if html_entity_state.get_base() == 16 =>
                         {
                             if length < html_entity_state.get_entity_max_length() {
                                 length += 1;
                             }
-                        }
-                        //This could be written better I think
+                        },
+                        // This could be written better I think
                         Some((_, ('x' | 'X'))) if html_entity_state.get_base() == 16 => {
                             continue;
-                        }
+                        },
 
                         Some((end_index, _)) => {
                             html_entity_state = HtmlEntityState::NoState;
                             length = 0;
                             current.push_str(&char_line[start_slice_index..end_index]);
-                        }
-                        None => {}
+                        },
+                        None => {},
                     }
                     continue;
                 }
@@ -670,15 +637,15 @@ impl InlineParser {
                                 onlySpace = false;
                             }
                         }
-                    }
+                    },
                     Some((_, ' ' | '\t')) if !space => {
                         result.push(Inline::Str(current));
                         current = String::new();
                         result.push(Inline::Space);
                         space = true;
-                    }
-                    Some((_, ' ' | '\t')) if space => {}
-                    Some((_, '\\')) => {
+                    },
+                    Some((_, ' ' | '\t')) if space => {},
+                    Some((_, '\\')) =>
                         if let Some((_, c)) = char_iter.next() {
                             if !ascii_punctuation.contains(&c) {
                                 current.push('\\');
@@ -691,8 +658,7 @@ impl InlineParser {
                             }
                             result.push(Inline::LineBreak);
                             break;
-                        }
-                    }
+                        },
                     Some((pos, '&')) => {
                         start_slice_index = pos;
                         match char_iter.peek() {
@@ -702,23 +668,23 @@ impl InlineParser {
                                     Some((index, ('X' | 'x'))) => {
                                         html_entity_state = HtmlEntityState::Hex;
                                         start_slice_index = *index + 1;
-                                    }
+                                    },
                                     Some((index, _)) => {
                                         html_entity_state = HtmlEntityState::Dec;
                                         start_slice_index = *index;
-                                    }
-                                    None => {}
+                                    },
+                                    None => {},
                                 }
-                            }
+                            },
                             Some(_) => {
                                 todo!()
-                            }
-                            None => {}
+                            },
+                            None => {},
                         }
-                    }
+                    },
                     Some((_, c)) => {
                         current.push(c);
-                    }
+                    },
                     None => {
                         if !current.is_empty() {
                             result.push(Inline::Str(current));
@@ -726,7 +692,7 @@ impl InlineParser {
                         }
                         result.push(Inline::SoftBreak);
                         break;
-                    }
+                    },
                 }
             }
         }
@@ -735,16 +701,12 @@ impl InlineParser {
     }
 
     #[must_use]
-    pub fn parse_vector(vector: &[String]) -> Vec<Inline> {
-        Self::parse_lines(&vector.join(""))
-    }
+    pub fn parse_vector(vector: &[String]) -> Vec<Inline> { Self::parse_lines(&vector.join("")) }
 
-    pub fn parse_line(line: String) -> Vec<Inline> {
-        Self::parse_lines(&line)
-    }
+    pub fn parse_line(line: String) -> Vec<Inline> { Self::parse_lines(&line) }
 
     fn _parse_one_line(line: &str, result: &mut Vec<Inline>) {
-        //todo
+        // todo
         let mut space = false;
         let mut current = String::new();
         for c in line.trim().chars() {
@@ -770,17 +732,15 @@ impl InlineParser {
 
 #[allow(dead_code)]
 fn parse_emph<'a>(
-    base_string: &'a str,
-    delimiter_stack: &mut Vec<DelimiterStruct<'a>>,
-    last_opener_star: &[Option<usize>; 3],
-    last_opener_floor: &[Option<usize>; 3],
+    base_string: &'a str, delimiter_stack: &mut Vec<DelimiterStruct<'a>>,
+    last_opener_star: &[Option<usize>; 3], last_opener_floor: &[Option<usize>; 3],
 ) -> Vec<InlineElement<'a>> {
     let mut emph_vector: Vec<InlineElement> = Vec::new();
-    //Nie moge przepisać na iterator bo iterator borrowuje wartość delimiter_stack
+    // Nie moge przepisać na iterator bo iterator borrowuje wartość delimiter_stack
     for index in 0..delimiter_stack.len() {
         let mut delim = delimiter_stack[index].clone();
         match delim.typeof_delimiter {
-            Potential::Opener => {}
+            Potential::Opener => {},
             Potential::Both | Potential::Closer => {
                 let length = delim.delim_slice.len();
                 let mut min_index = 0;
@@ -865,7 +825,7 @@ fn parse_emph<'a>(
                     }
                 }
                 delimiter_stack[index] = delim;
-            }
+            },
         }
     }
     emph_vector

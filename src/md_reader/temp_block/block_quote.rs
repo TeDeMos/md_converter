@@ -19,16 +19,13 @@ impl BlockQuote {
         let mut content = line.skip_indent_rest();
         content.move_indent_capped(1);
         let (current, finished) = TempBlock::new_empty(content);
-        Self {
-            current: Box::new(current),
-            finished,
-        }
+        Self { current: Box::new(current), finished }
     }
 
     /// Parses next non-blank line of a document
     pub fn next(&mut self, line: SkipIndent, links: &mut Links) -> LineResult {
         match line.indent {
-            0..=3 => {
+            0..=3 =>
                 if line.first == '>' {
                     let mut content = line.skip_indent_rest();
                     content.move_indent_capped(1);
@@ -36,8 +33,7 @@ impl BlockQuote {
                     LineResult::None
                 } else {
                     self.current.next_continuation(line)
-                }
-            }
+                },
             4.. => self.current.next_indented_continuation(line),
         }
     }

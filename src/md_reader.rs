@@ -27,15 +27,9 @@ impl AstReader for MdReader {
             current.next_str(line, &mut finished, &mut links);
         }
         current.finish_links(&mut links);
-        let result = finished
-            .into_iter()
-            .chain(iter::once(current))
-            .filter_map(TempBlock::finish)
-            .collect();
-        Ok(Pandoc {
-            blocks: result,
-            ..Default::default()
-        })
+        let result =
+            finished.into_iter().chain(iter::once(current)).filter_map(TempBlock::finish).collect();
+        Ok(Pandoc { blocks: result, ..Default::default() })
     }
 }
 
@@ -47,9 +41,8 @@ mod tests {
 
     use lazy_static::lazy_static;
 
-    use crate::ast::*;
-
     use super::*;
+    use crate::ast::*;
 
     lazy_static! {
         static ref TESTS: Vec<String> =
@@ -65,12 +58,7 @@ mod tests {
                 .stdout(Stdio::piped())
                 .spawn()
                 .unwrap();
-            child
-                .stdin
-                .as_mut()
-                .unwrap()
-                .write_all(e.as_bytes())
-                .unwrap();
+            child.stdin.as_mut().unwrap().write_all(e.as_bytes()).unwrap();
             let number = i + first;
             let expected: Pandoc = serde_json::from_str(
                 std::str::from_utf8(&child.wait_with_output().unwrap().stdout).unwrap(),
@@ -93,72 +81,44 @@ mod tests {
     }
 
     #[test]
-    fn tabs_and_precedence() {
-        test(1, 12)
-    }
+    fn tabs_and_precedence() { test(1, 12) }
 
     #[test]
-    fn thematic_breaks() {
-        test(13, 31)
-    }
+    fn thematic_breaks() { test(13, 31) }
 
     #[test]
-    fn atx_headings() {
-        test(32, 49)
-    }
+    fn atx_headings() { test(32, 49) }
 
     #[test]
-    fn setext_headings() {
-        test(50, 76)
-    }
+    fn setext_headings() { test(50, 76) }
 
     #[test]
-    fn indented_code_blocks() {
-        test(77, 88)
-    }
+    fn indented_code_blocks() { test(77, 88) }
 
     #[test]
-    fn fenced_code_blocks() {
-        test(89, 117)
-    }
+    fn fenced_code_blocks() { test(89, 117) }
 
     #[test]
-    fn html_blocks() {
-        test(118, 160)
-    }
+    fn html_blocks() { test(118, 160) }
 
     #[test]
-    fn link_reference_definitions() {
-        test(161, 188)
-    }
+    fn link_reference_definitions() { test(161, 188) }
 
     #[test]
-    fn paragraphs_and_blank_lines() {
-        test(189, 197)
-    }
+    fn paragraphs_and_blank_lines() { test(189, 197) }
 
     #[test]
-    fn tables() {
-        test(198, 205)
-    }
+    fn tables() { test(198, 205) }
 
     #[test]
-    fn block_quotes() {
-        test(206, 230)
-    }
+    fn block_quotes() { test(206, 230) }
 
     #[test]
-    fn list_items() {
-        test(231, 280)
-    }
+    fn list_items() { test(231, 280) }
 
     #[test]
-    fn lists() {
-        test(281, 306)
-    }
+    fn lists() { test(281, 306) }
 
     #[test]
-    fn emph() {
-        test(360, 490)
-    }
+    fn emph() { test(360, 490) }
 }

@@ -36,15 +36,13 @@ impl<'a> SkipIndent<'a> {
                         total,
                         line: unsafe { line.get_unchecked(i..) },
                     });
-                }
+                },
             }
         }
         SkipIndentResult::Blank(total - indent)
     }
 
-    pub fn move_indent(&mut self, indent: usize) {
-        self.indent -= indent;
-    }
+    pub fn move_indent(&mut self, indent: usize) { self.indent -= indent; }
 
     pub fn move_indent_capped(&mut self, indent: usize) {
         self.indent = self.indent.saturating_sub(indent);
@@ -54,13 +52,9 @@ impl<'a> SkipIndent<'a> {
         unsafe { self.line.get_unchecked(self.first.len_utf8()..) }
     }
 
-    pub fn iter_rest(&self) -> Iter<'a> {
-        Iter::new(self.get_rest())
-    }
+    pub fn iter_rest(&self) -> Iter<'a> { Iter::new(self.get_rest()) }
 
-    pub fn iter_full(&self) -> Iter<'a> {
-        Iter::new(self.line)
-    }
+    pub fn iter_full(&self) -> Iter<'a> { Iter::new(self.line) }
 
     pub fn indent_iter_rest(&self) -> IndentIter<'a> {
         IndentIter::new(self.get_rest(), self.total + 1)
@@ -86,7 +80,7 @@ impl<'a> SkipIndent<'a> {
                     result.push(' ');
                 }
                 result.push_str(self.line);
-            }
+            },
         }
     }
 }
@@ -97,20 +91,11 @@ pub struct Iter<'a> {
 }
 
 impl<'a> Iter<'a> {
-    pub fn new(source: &'a str) -> Self {
-        Self {
-            source,
-            iter: source.char_indices().peekable(),
-        }
-    }
+    pub fn new(source: &'a str) -> Self { Self { source, iter: source.char_indices().peekable() } }
 
-    pub fn peek(&mut self) -> Option<char> {
-        self.iter.peek().map(|x| x.1)
-    }
+    pub fn peek(&mut self) -> Option<char> { self.iter.peek().map(|x| x.1) }
 
-    pub fn next(&mut self) -> Option<char> {
-        self.iter.next().map(|x| x.1)
-    }
+    pub fn next(&mut self) -> Option<char> { self.iter.next().map(|x| x.1) }
 
     pub fn skip_while_eq(&mut self, c: char) -> usize {
         let mut result = 0;
@@ -119,7 +104,7 @@ impl<'a> Iter<'a> {
                 Some(&(_, current)) if current == c => {
                     self.iter.next();
                     result += 1;
-                }
+                },
                 Some(_) | None => return result,
             }
         }
@@ -130,7 +115,7 @@ impl<'a> Iter<'a> {
             Some(&(_, current)) if current == c => {
                 self.iter.next();
                 true
-            }
+            },
             Some(_) | None => false,
         }
     }
@@ -140,7 +125,7 @@ impl<'a> Iter<'a> {
             match self.iter.peek() {
                 Some((_, ' ' | '\t')) => {
                     self.iter.next();
-                }
+                },
                 Some(_) | None => return,
             }
         }
@@ -151,7 +136,7 @@ impl<'a> Iter<'a> {
             match self.iter.peek() {
                 Some((_, ' ' | '\t' | '\n')) => {
                     self.iter.next();
-                }
+                },
                 Some(_) | None => return,
             }
         }
@@ -164,7 +149,7 @@ impl<'a> Iter<'a> {
                 Some((_, ' ' | '\t')) => {
                     any = true;
                     self.iter.next();
-                }
+                },
                 Some(_) | None => return any,
             }
         }
@@ -177,41 +162,35 @@ impl<'a> Iter<'a> {
                 Some(&(_, current)) if current == c => {
                     self.iter.next();
                     any = true;
-                }
+                },
                 Some(_) | None => return any,
             }
         }
     }
 
-    pub fn ended(&mut self) -> bool {
-        self.iter.peek().is_none()
-    }
+    pub fn ended(&mut self) -> bool { self.iter.peek().is_none() }
 
     pub fn get_str_until_unescaped(&mut self, c: char) -> Option<&'a str> {
         let start = self.iter.peek()?.0;
         let mut escape = false;
         loop {
             match self.iter.next()? {
-                (end, current) if !escape && current == c => {
-                    return Some(unsafe { self.source.get_unchecked(start..end) })
-                }
+                (end, current) if !escape && current == c =>
+                    return Some(unsafe { self.source.get_unchecked(start..end) }),
                 (_, current) => escape = current == '\\' && !escape,
             }
         }
     }
 
     pub fn get_str_until_unescaped_without(
-        &mut self,
-        expected: char,
-        illegal: char,
+        &mut self, expected: char, illegal: char,
     ) -> Option<&'a str> {
         let start = self.iter.peek()?.0;
         let mut escape = false;
         loop {
             match self.iter.next()? {
-                (end, current) if !escape && current == expected => {
-                    return Some(unsafe { self.source.get_unchecked(start..end) })
-                }
+                (end, current) if !escape && current == expected =>
+                    return Some(unsafe { self.source.get_unchecked(start..end) }),
                 (_, current) if !escape && current == illegal => return None,
                 (_, current) => escape = current == '\\' && !escape,
             }
@@ -224,19 +203,17 @@ impl<'a> Iter<'a> {
                 let mut escape = false;
                 loop {
                     match self.iter.next()? {
-                        (e, '>') if !escape => {
-                            return Some(unsafe { self.source.get_unchecked((s + 1)..e) })
-                        }
+                        (e, '>') if !escape =>
+                            return Some(unsafe { self.source.get_unchecked((s + 1)..e) }),
                         (_, '\n') => return None,
                         (_, c) => escape = c == '\\' && !escape,
                     }
                 }
-            }
+            },
             (s, _) => loop {
                 match self.iter.peek() {
-                    Some(&(e, ' ' | '\t' | '\n')) => {
-                        return Some(unsafe { self.source.get_unchecked(s..e) })
-                    }
+                    Some(&(e, ' ' | '\t' | '\n')) =>
+                        return Some(unsafe { self.source.get_unchecked(s..e) }),
                     None => return Some(unsafe { self.source.get_unchecked(s..) }),
                     Some((_, c)) if c.is_ascii_control() => return None,
                     Some(_) => _ = self.iter.next(),
@@ -252,21 +229,13 @@ impl<'a> Iter<'a> {
         }
     }
 
-    pub fn iter_rest_rev(&mut self) -> RevIter {
-        RevIter::new(self.get_str())
-    }
+    pub fn iter_rest_rev(&mut self) -> RevIter { RevIter::new(self.get_str()) }
 
-    pub fn any_eq(&self, c: char) -> bool {
-        self.iter.clone().any(|(_, current)| current == c)
-    }
+    pub fn any_eq(&self, c: char) -> bool { self.iter.clone().any(|(_, current)| current == c) }
 
-    pub fn get_string(&mut self) -> String {
-        self.get_str().to_owned()
-    }
+    pub fn get_string(&mut self) -> String { self.get_str().to_owned() }
 
-    pub fn get_string_trimmed(&mut self) -> String {
-        self.get_str().trim_end().to_owned()
-    }
+    pub fn get_string_trimmed(&mut self) -> String { self.get_str().trim_end().to_owned() }
 }
 
 pub struct IndentIter<'a> {
@@ -277,11 +246,7 @@ pub struct IndentIter<'a> {
 
 impl<'a> IndentIter<'a> {
     fn new(source: &'a str, indent: usize) -> Self {
-        Self {
-            indent,
-            source,
-            iter: source.char_indices().peekable(),
-        }
+        Self { indent, source, iter: source.char_indices().peekable() }
     }
 
     pub fn get_number(&mut self, first: char) -> Option<(usize, usize)> {
@@ -297,23 +262,20 @@ impl<'a> IndentIter<'a> {
                     result = 10 * result + (c as usize - '0' as usize);
                     self.indent += 1;
                     self.iter.next();
-                }
+                },
                 Some(_) | None => return Some((result, length)),
             }
         }
     }
 
     pub fn get_closing(&mut self) -> Option<char> {
-        self.iter
-            .next_if(|(_, c)| matches!(c, '.' | ')'))
-            .map(|x| x.1)
+        self.iter.next_if(|(_, c)| matches!(c, '.' | ')')).map(|x| x.1)
     }
 
     pub fn skip_indent(&mut self) -> SkipIndentResult<'a> {
         match self.iter.peek() {
-            Some(&(i, _)) => {
-                SkipIndent::skip(unsafe { self.source.get_unchecked(i..) }, self.indent)
-            }
+            Some(&(i, _)) =>
+                SkipIndent::skip(unsafe { self.source.get_unchecked(i..) }, self.indent),
             None => SkipIndentResult::Blank(0),
         }
     }
@@ -326,10 +288,7 @@ pub struct RevIter<'a> {
 
 impl<'a> RevIter<'a> {
     fn new(source: &'a str) -> Self {
-        Self {
-            source,
-            iter: source.char_indices().rev().peekable(),
-        }
+        Self { source, iter: source.char_indices().rev().peekable() }
     }
 
     pub fn skip_while_eq(&mut self, c: char) -> usize {
@@ -339,7 +298,7 @@ impl<'a> RevIter<'a> {
                 Some(&(_, current)) if current == c => {
                     count += 1;
                     self.iter.next();
-                }
+                },
                 Some(_) | None => return count,
             }
         }
@@ -350,7 +309,7 @@ impl<'a> RevIter<'a> {
             match self.iter.peek() {
                 Some(&(_, ' ' | '\t')) => {
                     self.iter.next();
-                }
+                },
                 Some(_) | None => return,
             }
         }
@@ -368,12 +327,10 @@ impl<'a> RevIter<'a> {
             Some((_, ' ' | '\t')) | None => {
                 self.iter.next();
                 true
-            }
+            },
             Some(_) => false,
         }
     }
 
-    pub fn get_string(&mut self) -> String {
-        self.get_str().to_owned()
-    }
+    pub fn get_string(&mut self) -> String { self.get_str().to_owned() }
 }

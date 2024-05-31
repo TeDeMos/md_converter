@@ -21,13 +21,7 @@ impl AtxHeading {
             return CheckResult::Text(line);
         }
         if iter.ended() {
-            return CheckResult::Done(
-                Self {
-                    level: count,
-                    content: String::new(),
-                }
-                .into(),
-            );
+            return CheckResult::Done(Self { level: count, content: String::new() }.into());
         }
         if !iter.skip_whitespace_min_one() {
             return CheckResult::Text(line);
@@ -40,13 +34,7 @@ impl AtxHeading {
         } else {
             iter.get_string()
         };
-        CheckResult::Done(
-            Self {
-                level: count,
-                content,
-            }
-            .into(),
-        )
+        CheckResult::Done(Self { level: count, content }.into())
     }
 
     /// Finishes a heading into a [`Block`] by parsing the content

@@ -69,14 +69,7 @@ pub enum Block {
     HorizontalRule,
     /// Table with [`Attr`], [`Caption`], a list of [`ColSpec`] for each column, [`TableHead`], a
     /// list of [`TableBody`] elements and a [`TableFoot`]
-    Table(
-        Attr,
-        Caption,
-        Vec<ColSpec>,
-        TableHead,
-        Vec<TableBody>,
-        TableFoot,
-    ),
+    Table(Attr, Caption, Vec<ColSpec>, TableHead, Vec<TableBody>, TableFoot),
     /// Figure with [`Attr`], [`Caption`] and content as a list of [`Block`] elements
     Figure(Attr, Caption, Vec<Block>),
     /// Generic [`Block`] container with [`Attr`]
@@ -109,10 +102,7 @@ impl Block {
         Self::Table(
             attr_empty(),
             Caption::default(),
-            alignments
-                .into_iter()
-                .map(|a| (a, ColWidth::ColWidthDefault))
-                .collect(),
+            alignments.into_iter().map(|a| (a, ColWidth::ColWidthDefault)).collect(),
             TableHead::new(iter.next().unwrap(), size),
             vec![TableBody::new(iter, size)],
             TableFoot::default(),
@@ -171,9 +161,7 @@ pub type Attr = (Text, Vec<Text>, Vec<(Text, Text)>);
 
 /// Creates empty [`Attr`]
 #[must_use]
-pub fn attr_empty() -> Attr {
-    (String::new(), Vec::new(), Vec::new())
-}
+pub fn attr_empty() -> Attr { (String::new(), Vec::new(), Vec::new()) }
 
 /// Format for [`Block::RawBlock`] and [`Inline::RawInline`]
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Default)]
@@ -188,15 +176,11 @@ pub type ListAttributes = (Int, ListNumberStyle, ListNumberDelim);
 /// If `starting` cannot fit into an [`i32`] or if closing char is not `'.'` or `')'`
 #[must_use]
 pub fn new_list_attributes(starting: usize, closing: char) -> ListAttributes {
-    (
-        Int::try_from(starting).unwrap(),
-        ListNumberStyle::Decimal,
-        match closing {
-            '.' => ListNumberDelim::Period,
-            ')' => ListNumberDelim::OneParen,
-            _ => panic!(),
-        },
-    )
+    (Int::try_from(starting).unwrap(), ListNumberStyle::Decimal, match closing {
+        '.' => ListNumberDelim::Period,
+        ')' => ListNumberDelim::OneParen,
+        _ => panic!(),
+    })
 }
 
 /// Caption of a [`Block::Table`] or [`Block::Figure`] with an optional [`ShortCaption`]
@@ -233,15 +217,8 @@ impl TableBody {
     /// the row contains too many elements, the excess will be ignored and if it contains too
     /// little elements, empty cells will be added.
     pub fn new<I>(rows: I, size: usize) -> Self
-    where
-        I: Iterator<Item = Vec<String>>,
-    {
-        Self(
-            attr_empty(),
-            RowHeadColumns(0),
-            Vec::new(),
-            rows.map(|r| Row::new(r, size)).collect(),
-        )
+    where I: Iterator<Item = Vec<String>> {
+        Self(attr_empty(), RowHeadColumns(0), Vec::new(), rows.map(|r| Row::new(r, size)).collect())
     }
 }
 
@@ -386,13 +363,7 @@ pub enum CitationMode {
 
 /// A [`Block::Table`] cell
 #[derive(Serialize, Deserialize, Debug, PartialEq, PartialOrd, Clone, Default)]
-pub struct Cell(
-    pub Attr,
-    pub Alignment,
-    pub RowSpan,
-    pub ColSpan,
-    pub Vec<Block>,
-);
+pub struct Cell(pub Attr, pub Alignment, pub RowSpan, pub ColSpan, pub Vec<Block>);
 
 impl Cell {
     /// Creates a new [`Cell`]. The [`String`] will be parsed as a `[Block::Inline`]. The cell will
@@ -405,11 +376,7 @@ impl Cell {
             Alignment::Default,
             RowSpan(1),
             ColSpan(1),
-            if inlines.is_empty() {
-                Vec::new()
-            } else {
-                vec![Block::Plain(inlines)]
-            },
+            if inlines.is_empty() { Vec::new() } else { vec![Block::Plain(inlines)] },
         )
     }
 }
@@ -419,9 +386,7 @@ impl Cell {
 pub struct RowSpan(pub Int);
 
 impl Default for RowSpan {
-    fn default() -> Self {
-        Self(1)
-    }
+    fn default() -> Self { Self(1) }
 }
 
 /// The number of columns occupied by a cell; the width of a cell.
@@ -429,7 +394,5 @@ impl Default for RowSpan {
 pub struct ColSpan(pub Int);
 
 impl Default for ColSpan {
-    fn default() -> Self {
-        Self(1)
-    }
+    fn default() -> Self { Self(1) }
 }

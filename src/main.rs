@@ -6,7 +6,6 @@ use std::fs;
 
 use clap::builder::PossibleValuesParser;
 use clap::{Arg, ArgAction, Command};
-
 use md_converter::ast::Pandoc;
 use md_converter::latex_writer::LatexWriter;
 use md_converter::md_reader::inline_parser::InlineParser;
@@ -20,7 +19,7 @@ fn main() {
     let test = "* a *";
     let res = InlineParser::parse_lines(test);
 
-    //run()
+    // run()
     // let result = MdReader::read(
     //     "a\n:-"
     // )
@@ -65,34 +64,28 @@ fn run() {
                 .value_name("OUTPUT_FILE")
                 .ignore_case(true),
         )
-        .arg(
-            Arg::new("file")
-                .required(true)
-                .index(1)
-                .action(ArgAction::Set)
-                .value_name("FILE"),
-        )
+        .arg(Arg::new("file").required(true).index(1).action(ArgAction::Set).value_name("FILE"))
         .get_matches();
     let content = match fs::read_to_string(matches.get_one::<String>("file").unwrap()) {
         Ok(s) => s,
         Err(e) => {
             println!("Failed to read file:\n{}", e);
             return;
-        }
+        },
     };
     let parsed = match input_formats.read(matches.get_one::<String>("from").unwrap(), &content) {
         Ok(p) => p,
         Err(e) => {
             println!("Failed to parse input format:\n{}", e);
             return;
-        }
+        },
     };
     let result = match output_formats.write(matches.get_one::<String>("to").unwrap(), parsed) {
         Ok(s) => s,
         Err(e) => {
             println!("Failed to parse output format:\n{}", e);
             return;
-        }
+        },
     };
     match matches.get_one::<String>("output") {
         Some(f) => match fs::write(f, result) {
@@ -108,9 +101,7 @@ pub type Reader = Box<dyn Fn(&str) -> Result<Pandoc, Box<dyn Error>>>;
 pub struct ReaderMap(HashMap<&'static str, Reader>);
 
 impl ReaderMap {
-    pub fn new() -> Self {
-        Self(HashMap::new())
-    }
+    pub fn new() -> Self { Self(HashMap::new()) }
 
     pub fn add<T, E>(&mut self, name: &'static str, reader_creator: fn() -> T)
     where
@@ -126,9 +117,7 @@ impl ReaderMap {
         );
     }
 
-    pub fn keys(&self) -> impl Iterator<Item = &&'static str> {
-        self.0.keys()
-    }
+    pub fn keys(&self) -> impl Iterator<Item = &&'static str> { self.0.keys() }
 
     pub fn read(&self, name: &str, source: &str) -> Result<Pandoc, Box<dyn Error>> {
         self.0.get(name).unwrap()(source)
@@ -140,9 +129,7 @@ pub type Writer = Box<dyn Fn(Pandoc) -> Result<String, Box<dyn Error>>>;
 pub struct WriterMap(HashMap<&'static str, Writer>);
 
 impl WriterMap {
-    pub fn new() -> Self {
-        Self(HashMap::new())
-    }
+    pub fn new() -> Self { Self(HashMap::new()) }
 
     pub fn add<T, E>(&mut self, name: &'static str, writer_creator: fn() -> T)
     where
@@ -158,9 +145,7 @@ impl WriterMap {
         );
     }
 
-    pub fn keys(&self) -> impl Iterator<Item = &&'static str> {
-        self.0.keys()
-    }
+    pub fn keys(&self) -> impl Iterator<Item = &&'static str> { self.0.keys() }
 
     pub fn write(&self, name: &str, pandoc: Pandoc) -> Result<String, Box<dyn Error>> {
         self.0.get(name).unwrap()(pandoc)

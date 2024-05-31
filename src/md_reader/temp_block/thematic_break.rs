@@ -25,7 +25,5 @@ impl ThematicBreak {
     }
 
     /// Finishes a thematic break into a [`Block`]
-    pub const fn finish() -> Block {
-        Block::HorizontalRule
-    }
+    pub const fn finish() -> Block { Block::HorizontalRule }
 }

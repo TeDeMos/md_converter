@@ -81,9 +81,8 @@ impl TempBlock {
     fn next_blank(&mut self, indent: usize, links: &mut Links) -> (LineResult, bool) {
         match self {
             Self::Empty => return (LineResult::None, true),
-            Self::Paragraph(_) | Self::Table(_) | Self::BlockQuote(_) => {
-                return (LineResult::DoneSelf, true)
-            }
+            Self::Paragraph(_) | Self::Table(_) | Self::BlockQuote(_) =>
+                return (LineResult::DoneSelf, true),
             Self::IndentedCodeBlock(i) => i.push_blank(indent),
             Self::FencedCodeBlock(f) => f.push_blank(indent),
             Self::List(l) => l.next_blank(indent, links),
@@ -100,9 +99,7 @@ impl TempBlock {
         match self {
             Self::Paragraph(p) => p.next_continuation(line),
             Self::BlockQuote(b) => b.current.next_continuation(line),
-            Self::List(List {
-                current: Some(c), ..
-            }) => c.current.next_continuation(line),
+            Self::List(List { current: Some(c), .. }) => c.current.next_continuation(line),
             _ => Self::check_block_known_indent(line).into_line_result_paragraph(true),
         }
     }
@@ -116,11 +113,9 @@ impl TempBlock {
             Self::Paragraph(p) => {
                 p.next_indented_continuation(&line);
                 LineResult::None
-            }
+            },
             Self::BlockQuote(b) => b.current.next_indented_continuation(line),
-            Self::List(List {
-                current: Some(c), ..
-            }) => c.current.next_indented_continuation(line),
+            Self::List(List { current: Some(c), .. }) => c.current.next_indented_continuation(line),
             _ => LineResult::DoneSelfAndNew(IndentedCodeBlock::new(line).into()),
         }
     }
@@ -129,7 +124,7 @@ impl TempBlock {
     /// `finished` argument. Used by [`BlockQuote`] and [`List`] when starting the first block
     fn apply_result_no_links(&mut self, result: LineResult, finished: &mut Vec<Self>) {
         match result {
-            LineResult::None => {}
+            LineResult::None => {},
             LineResult::New(new) => *self = new,
             LineResult::DoneSelf => finished.push(self.take()),
             LineResult::Done(block) => finished.push(block),
@@ -137,7 +132,7 @@ impl TempBlock {
             LineResult::DoneSelfAndOther(block) => {
                 finished.push(self.take());
                 finished.push(block);
-            }
+            },
         }
     }
 
@@ -145,26 +140,26 @@ impl TempBlock {
     /// links into the [`links`] argument
     fn apply_result(&mut self, result: LineResult, finished: &mut Vec<Self>, links: &mut Links) {
         match result {
-            LineResult::None => {}
+            LineResult::None => {},
             LineResult::New(new) => *self = new,
             LineResult::DoneSelf => {
                 self.finish_links(links);
                 finished.push(self.take());
-            }
+            },
             LineResult::Done(mut block) => {
                 block.finish_links(links);
                 finished.push(block);
-            }
+            },
             LineResult::DoneSelfAndNew(block) => {
                 self.finish_links(links);
                 finished.push(self.replace(block));
-            }
+            },
             LineResult::DoneSelfAndOther(mut block) => {
                 self.finish_links(links);
                 block.finish_links(links);
                 finished.push(self.take());
                 finished.push(block);
-            }
+            },
         }
     }
 
@@ -173,10 +168,8 @@ impl TempBlock {
         match self {
             Self::Paragraph(p) => p.add_links(links),
             Self::BlockQuote(b) => b.current.finish_links(links),
-            Self::List(List {
-                current: Some(c), ..
-            }) => c.current.finish_links(links),
-            _ => {}
+            Self::List(List { current: Some(c), .. }) => c.current.finish_links(links),
+            _ => {},
         }
     }
 
@@ -204,7 +197,7 @@ impl TempBlock {
                 let mut finished = Vec::new();
                 new.apply_result_no_links(Self::empty_next_line(line), &mut finished);
                 (new, finished)
-            }
+            },
             SkipIndentResult::Blank(_) => (Self::Empty, Vec::new()),
         }
     }
@@ -253,19 +246,13 @@ impl TempBlock {
     }
 
     /// Replaces self with the default value ([`Self::Empty`]), returning the previous value
-    fn take(&mut self) -> Self {
-        std::mem::take(self)
-    }
+    fn take(&mut self) -> Self { std::mem::take(self) }
 
     /// Replaces self with the new value, returning the previous value
-    fn replace(&mut self, new: Self) -> Self {
-        std::mem::replace(self, new)
-    }
+    fn replace(&mut self, new: Self) -> Self { std::mem::replace(self, new) }
 
     /// Returns whether the current value is [`Self::Empty`]
-    const fn is_empty(&self) -> bool {
-        matches!(self, Self::Empty)
-    }
+    const fn is_empty(&self) -> bool { matches!(self, Self::Empty) }
 
     /// Returns whether the current item ends with a gap (used by [`List`] to check if it is loose,
     /// only checks blocks that are not ended by blank lines)
@@ -296,9 +283,7 @@ pub enum LineResult {
 
 impl LineResult {
     /// Returns whether current variant is [`Self::New`] or [`Self::Done`]
-    const fn is_done_or_new(&self) -> bool {
-        matches!(self, Self::New(_) | Self::Done(_))
-    }
+    const fn is_done_or_new(&self) -> bool { matches!(self, Self::New(_) | Self::Done(_)) }
 
     /// Returns whether current variant is [`Self::DoneSelfAndNew`] or [`Self::DoneSelfAndOther`]
     const fn is_done_self_and_new_or_other(&self) -> bool {
@@ -338,9 +323,7 @@ impl<'a> CheckResult<'a> {
     /// `done_self` argument. Done block is converted into [`LineResult::Done`] or
     /// [`LineResult::DoneSelfAndOther`] depending on the `done_self` argument.
     fn into_line_result<F>(self, done_self: bool, text_function: F) -> LineResult
-    where
-        F: FnOnce(SkipIndent<'a>) -> LineResult,
-    {
+    where F: FnOnce(SkipIndent<'a>) -> LineResult {
         match (self, done_self) {
             (CheckResult::New(b), false) => LineResult::New(b),
             (CheckResult::New(b), true) => LineResult::DoneSelfAndNew(b),

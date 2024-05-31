@@ -12,12 +12,7 @@ pub struct LatexWriter {
 }
 
 impl LatexWriter {
-    pub fn new() -> Self {
-        Self {
-            result: String::new(),
-            enum_level: 0,
-        }
-    }
+    pub fn new() -> Self { Self { result: String::new(), enum_level: 0 } }
 }
 
 impl AstWriter for LatexWriter {
@@ -47,13 +42,9 @@ pub enum WriteError {
 impl Error for WriteError {}
 
 impl LatexWriter {
-    fn push_str(&mut self, str: &str) {
-        self.result.push_str(str)
-    }
+    fn push_str(&mut self, str: &str) { self.result.push_str(str) }
 
-    fn push(&mut self, c: char) {
-        self.result.push(c)
-    }
+    fn push(&mut self, c: char) { self.result.push(c) }
 
     fn write_blocks(&mut self, blocks: Vec<Block>) -> Result<(), WriteError> {
         for b in blocks {
@@ -68,42 +59,31 @@ impl LatexWriter {
                 self.push('\n');
                 self.write_inlines(p)?;
                 self.push('\n');
-            }
+            },
             Block::CodeBlock((l, ..), t) => self.write_code_block(&l, &t),
             Block::BlockQuote(b) => {
                 self.push_str("\n\\begin{quote}\n");
                 self.write_blocks(b)?;
                 self.push_str("\n\\end{quote}\n");
-            }
+            },
             Block::OrderedList((s, ..), items) => {
                 self.enum_level += 1;
                 self.write_ordered_list(s, items)?;
                 self.enum_level -= 1;
-            }
+            },
             Block::BulletList(items) => self.write_bullet_list(items)?,
             Block::Header(l, _, i) => self.write_header(l, i)?,
-            Block::HorizontalRule => {
-                self.push_str("\n\\begin{center}\\rule{0.5\\linewidth}{0.5pt}\\end{center}\n")
-            }
+            Block::HorizontalRule =>
+                self.push_str("\n\\begin{center}\\rule{0.5\\linewidth}{0.5pt}\\end{center}\n"),
             Block::Table(_, _, s, TableHead(_, h), b, _) => self.write_table(s, h, b)?,
-            Block::LineBlock(_) => {
-                return Err(WriteError::NotImplemented(
-                    "Line block is not yet implemented",
-                ))
-            }
-            Block::RawBlock(..) => {
-                return Err(WriteError::NotImplemented(
-                    "Raw block is not yet implemented",
-                ))
-            }
-            Block::DefinitionList(_) => {
-                return Err(WriteError::NotImplemented(
-                    "Definition list is not yet implemented",
-                ))
-            }
-            Block::Figure(..) => {
-                return Err(WriteError::NotImplemented("Figure is not yet implemented"))
-            }
+            Block::LineBlock(_) =>
+                return Err(WriteError::NotImplemented("Line block is not yet implemented")),
+            Block::RawBlock(..) =>
+                return Err(WriteError::NotImplemented("Raw block is not yet implemented")),
+            Block::DefinitionList(_) =>
+                return Err(WriteError::NotImplemented("Definition list is not yet implemented")),
+            Block::Figure(..) =>
+                return Err(WriteError::NotImplemented("Figure is not yet implemented")),
             Block::Div(..) => return Err(WriteError::NotImplemented("Div is not yet implemented")),
         };
         Ok(())
@@ -174,10 +154,7 @@ impl LatexWriter {
     }
 
     fn write_table(
-        &mut self,
-        spec: Vec<ColSpec>,
-        head: Vec<Row>,
-        body: Vec<TableBody>,
+        &mut self, spec: Vec<ColSpec>, head: Vec<Row>, body: Vec<TableBody>,
     ) -> Result<(), WriteError> {
         self.push_str("\n\\begin{tabular}{|");
         let width = spec.len();
@@ -189,10 +166,7 @@ impl LatexWriter {
             });
         }
         self.push_str("} \\hline \n");
-        for r in head
-            .into_iter()
-            .chain(body.into_iter().next().into_iter().flat_map(|b| b.3))
-        {
+        for r in head.into_iter().chain(body.into_iter().next().into_iter().flat_map(|b| b.3)) {
             let row_length = r.1.len();
             for c in r.1.into_iter().take(width) {
                 let mut c_iter = c.4.into_iter();
@@ -239,22 +213,22 @@ impl LatexWriter {
                 self.push_str("\\emph{");
                 self.write_inlines(i)?;
                 self.push('}');
-            }
+            },
             Inline::Strong(i) => {
                 self.push_str("\\textbf{");
                 self.write_inlines(i)?;
                 self.push('}');
-            }
+            },
             Inline::Strikeout(i) => {
                 self.push_str("\\sout{");
                 self.write_inlines(i)?;
                 self.push('}');
-            }
+            },
             Inline::Code(_, s) => {
                 self.push_str("\\texttt{");
                 self.write_str(&s);
                 self.push('}');
-            }
+            },
             Inline::Space | Inline::SoftBreak => self.push(' '),
             Inline::LineBreak => self.push_str("\\\\\n"),
             Inline::Link(_, _, (u, t)) => {
@@ -263,52 +237,32 @@ impl LatexWriter {
                 self.push_str("}{");
                 self.push_str(&t);
                 self.push('}');
-            }
+            },
             Inline::Image(_, _, (u, _)) => {
                 self.push_str("\n\\includegraphics[width=\\linewidth]{");
                 self.push_str(&u);
                 self.push_str("}\n");
-            }
-            Inline::Underline(_) => {
-                return Err(WriteError::NotImplemented(
-                    "Underline is not yet implemented",
-                ))
-            }
-            Inline::Superscript(_) => {
-                return Err(WriteError::NotImplemented(
-                    "Superscript is not yet implemented",
-                ))
-            }
-            Inline::Subscript(_) => {
-                return Err(WriteError::NotImplemented(
-                    "Subscript is not yet implemented",
-                ))
-            }
-            Inline::SmallCaps(_) => {
-                return Err(WriteError::NotImplemented(
-                    "Small caps is not yet implemented",
-                ))
-            }
-            Inline::Quoted(..) => {
-                return Err(WriteError::NotImplemented("Quoted is not yet implemented"))
-            }
-            Inline::Cite(..) => {
-                return Err(WriteError::NotImplemented("Cite is not yet implemented"))
-            }
-            Inline::Math(..) => {
-                return Err(WriteError::NotImplemented("Math is not yet implemented"))
-            } //???
-            Inline::RawInline(..) => {
-                return Err(WriteError::NotImplemented(
-                    "Raw inline is not yet implemented",
-                ))
-            }
-            Inline::Note(_) => {
-                return Err(WriteError::NotImplemented("Note is not yet implemented"))
-            }
-            Inline::Span(..) => {
-                return Err(WriteError::NotImplemented("Span is not yet implemented"))
-            }
+            },
+            Inline::Underline(_) =>
+                return Err(WriteError::NotImplemented("Underline is not yet implemented")),
+            Inline::Superscript(_) =>
+                return Err(WriteError::NotImplemented("Superscript is not yet implemented")),
+            Inline::Subscript(_) =>
+                return Err(WriteError::NotImplemented("Subscript is not yet implemented")),
+            Inline::SmallCaps(_) =>
+                return Err(WriteError::NotImplemented("Small caps is not yet implemented")),
+            Inline::Quoted(..) =>
+                return Err(WriteError::NotImplemented("Quoted is not yet implemented")),
+            Inline::Cite(..) =>
+                return Err(WriteError::NotImplemented("Cite is not yet implemented")),
+            Inline::Math(..) =>
+                return Err(WriteError::NotImplemented("Math is not yet implemented")), //???
+            Inline::RawInline(..) =>
+                return Err(WriteError::NotImplemented("Raw inline is not yet implemented")),
+            Inline::Note(_) =>
+                return Err(WriteError::NotImplemented("Note is not yet implemented")),
+            Inline::Span(..) =>
+                return Err(WriteError::NotImplemented("Span is not yet implemented")),
         }
         Ok(())
     }
@@ -324,7 +278,7 @@ impl LatexWriter {
             '&' | '%' | '$' | '#' | '_' | '{' | '}' => {
                 self.push('\\');
                 self.push(c);
-            }
+            },
             '~' => self.push_str("\\textasciitilde{}"),
             '^' => self.push_str("\\^{}"),
             '\\' => self.push_str("\\textbackslash{}"),
@@ -351,9 +305,7 @@ mod test {
     fn special_chars() {
         let p = Pandoc {
             meta: Meta::default(),
-            blocks: vec![Block::Plain(vec![Inline::Str(String::from(
-                "&%$#_{}~^\\`",
-            ))])],
+            blocks: vec![Block::Plain(vec![Inline::Str(String::from("&%$#_{}~^\\`"))])],
         };
         let result = LatexWriter::new().write(p).unwrap();
         let content = get_content(&result);

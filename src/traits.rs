@@ -1,6 +1,7 @@
-use crate::ast::Pandoc;
 use std::collections::HashMap;
 use std::error::Error;
+
+use crate::ast::Pandoc;
 
 pub trait AstReader {
     type ReadError: Error;
