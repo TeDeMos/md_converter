@@ -2,14 +2,19 @@ use crate::ast::{Alignment, Block};
 use crate::md_reader::iters::SkipIndent;
 use crate::md_reader::temp_block::{LineResult, NewResult, Paragraph, TempBlock};
 
+/// Struct representing an unfinished table
 #[derive(Debug)]
 pub struct Table {
-    size: usize,
+    /// Alignments of each column
     alignments: Vec<Alignment>,
+    /// Table rows
     rows: Vec<Vec<String>>,
 }
 
 impl Table {
+    /// Checks if a line is a table delimiter row with the amount of columns matching the table
+    /// header count of the previous line in a paragraph. If the check passes it removes the last
+    /// line of the `paragraph` to use as the header
     pub fn check<'a>(line: SkipIndent<'a>, paragraph: &mut Paragraph) -> NewResult<'a> {
         if paragraph.table_header_length == 0 {
             return NewResult::Text(line);
@@ -38,7 +43,7 @@ impl Table {
         iter.skip_whitespace();
         if iter.ended() {
             let mut result =
-                Self { size: paragraph.table_header_length, alignments, rows: Vec::new() };
+                Self { alignments, rows: Vec::new() };
             result.push(paragraph.get_last_line());
             paragraph.trim_last_line();
             NewResult::New(result.into())
@@ -47,6 +52,7 @@ impl Table {
         }
     }
 
+    /// Parses next non-blank line of a document
     pub fn next(&mut self, line: SkipIndent) -> LineResult {
         TempBlock::check_block(line).into_line_result(true, |s| {
             self.push(s.line);
@@ -54,8 +60,10 @@ impl Table {
         })
     }
 
+    /// Finishes the table into a [`Block`]
     pub fn finish(self) -> Block { Block::new_table(self.rows, self.alignments) }
 
+    /// Checks how many columns a table header defined by this line has
     pub fn check_header(line: &str) -> usize {
         let mut iter = line.chars();
         let mut count = 1;
@@ -78,6 +86,7 @@ impl Table {
         count
     }
 
+    /// Pushes a line splitting it into cells
     fn push(&mut self, line: &str) {
         let mut iter = line.trim().chars().peekable();
         iter.next_if_eq(&'|');
@@ -88,7 +97,7 @@ impl Table {
                 Some('\\') => current.push(iter.next_if_eq(&'|').unwrap_or('\\')),
                 Some('|') | None => {
                     result.push(current);
-                    if result.len() == self.size {
+                    if result.len() == self.alignments.len() {
                         self.rows.push(result);
                         return;
                     }

@@ -173,7 +173,7 @@ impl TempBlock {
         }
     }
 
-    /// Finishes block into a [`Block`] 
+    /// Finishes block into a [`Block`]
     pub fn finish(self) -> Option<Block> {
         match self {
             Self::Empty => None,
@@ -253,12 +253,14 @@ impl TempBlock {
 
     /// Returns whether the current value is [`Self::Empty`]
     const fn is_empty(&self) -> bool { matches!(self, Self::Empty) }
-
-    /// Returns a reference to the [`List`] if the current value is [`Self::List`]
-    const fn as_list(&self) -> Option<&List> {
+    
+    /// Returns whether the current item ends with a gap (used by [`List`] to check if it is loose,
+    /// only checks blocks that are not ended by blank lines)
+    fn ends_with_gap(&self) -> bool {
         match self {
-            Self::List(l) => Some(l),
-            _ => None,
+            Self::IndentedCodeBlock(i) => i.ends_with_blank,
+            Self::List(l) => l.ends_with_blank(),
+            _ => false
         }
     }
 }
@@ -333,7 +335,7 @@ impl<'a> CheckResult<'a> {
 }
 
 /// Enum representing result of checking if a new block is started
-enum NewResult<'a> {
+pub enum NewResult<'a> {
     New(TempBlock),
     Text(SkipIndent<'a>),
 }

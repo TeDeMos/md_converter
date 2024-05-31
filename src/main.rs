@@ -7,7 +7,7 @@ use md_converter::traits::AstReader;
 
 fn main() {
     let result = MdReader::read(
-        "[\\*]: a 'a'\n[*]"
+        "a\n:-"
     )
     .into_ok();
     dbg!(result);

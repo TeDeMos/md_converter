@@ -11,7 +11,7 @@ use crate::md_reader::temp_block::{
 pub struct Paragraph {
     /// Content of the paragraph
     pub content: String,
-    /// Length of the table header defined by the last line, 0 if last line is not a table header
+    /// Amount of columns of the table header defined by the last line
     pub table_header_length: usize,
     /// Index of the start of the last line in `content`
     line_start: usize,
@@ -33,7 +33,7 @@ impl Paragraph {
         }
     }
 
-    /// Parses next non-blank line of a document, returning a [`LineResult`]
+    /// Parses a non-blank line of a document
     pub fn next(&mut self, line: SkipIndent) -> LineResult {
         let checked = match line.indent {
             0..=3 => match line.first {
@@ -63,7 +63,7 @@ impl Paragraph {
         checked.into_line_result(true, |s| self.push_full_check(s))
     }
 
-    /// Parses non-blank line of a document as a continuation line indented at most 3 spaces
+    /// Parses a non-blank line of a document as a continuation line indented at most 3 spaces
     pub fn next_continuation(&mut self, line: SkipIndent) -> LineResult {
         TempBlock::check_block_known_indent(line).into_line_result(true, |s| {
             self.push_header_no_indent_check(&s);
@@ -71,7 +71,7 @@ impl Paragraph {
         })
     }
 
-    /// Parses non-blank line of a document as a continuation line indented at least 4 spaces
+    /// Parses a non-blank line of a document as a continuation line indented at least 4 spaces
     pub fn next_indented_continuation(&mut self, line: &SkipIndent) { self.push(line.line); }
 
     /// Extracts links from this paragraph adding them into the `links` argument
@@ -132,10 +132,10 @@ impl Paragraph {
     }
 
     /// Gets last line of this paragraph
-    pub fn get_last_line(&self) -> &str { 
+    pub fn get_last_line(&self) -> &str {
         // Safety: self.line_start is 0 at first (beginning of the string) and before each push it's
         // set to the end of the previous string, therefore it's always on a UTF-8 char boundary
-        unsafe { self.content.get_unchecked(self.line_start..) } 
+        unsafe { self.content.get_unchecked(self.line_start..) }
     }
 
     /// Trims last line and the preceding new line character

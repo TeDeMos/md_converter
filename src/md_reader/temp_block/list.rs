@@ -3,17 +3,21 @@ use std::iter;
 use crate::ast::{new_list_attributes, Block};
 use crate::md_reader::iters::SkipIndent;
 use crate::md_reader::temp_block::{
-    CheckResult, IndentedCodeBlock, LineResult, SkipIndentResult, TempBlock,
-    ThematicBreak,
+    CheckResult, IndentedCodeBlock, LineResult, SkipIndentResult, TempBlock, ThematicBreak,
 };
 use crate::md_reader::Links;
 
+/// Struct representing an unfinished list
 #[derive(Debug)]
 pub struct List {
+    /// Type of the list
     #[allow(clippy::struct_field_names)]
     list_type: ListType,
+    /// Finished items of the list
     items: Vec<Item>,
+    /// Current open item of the list
     pub current: Option<Item>,
+    /// Whether the list is loose
     loose: bool,
 }
 
@@ -30,61 +34,55 @@ struct Ordered {
 }
 
 impl List {
+    /// Creates a new list with one given open [`Item`] and [`ListType`]
     fn new(current: Item, list_type: ListType) -> Self {
         Self { list_type, items: Vec::new(), current: Some(current), loose: false }
     }
 
+    /// Checks if the line is the beginning of a list assuming the first char is a `'*'` or a `'-'`
+    /// and the line doesn't come after a paragraph
     pub fn check_star_dash(line: SkipIndent) -> CheckResult {
         let c = line.first;
-        match Item::check_star_dash(line) {
-            NewItemBreakResult::New(i) =>
-                CheckResult::New(Self::new(i, ListType::Unordered(c)).into()),
-            NewItemBreakResult::Break => CheckResult::Done(ThematicBreak.into()),
-            NewItemBreakResult::Text(s) => CheckResult::Text(s),
-        }
+        Item::check_star_dash(line).into_check_result(c)
     }
 
+    /// Checks if the line is the beginning of a list assuming the first char is a `'*'` and the
+    /// line comes after a paragraph
     pub fn check_star_paragraph(line: SkipIndent) -> CheckResult {
-        match Item::check_star_paragraph(line) {
-            NewItemBreakResult::New(i) =>
-                CheckResult::New(Self::new(i, ListType::Unordered('*')).into()),
-            NewItemBreakResult::Break => CheckResult::Done(ThematicBreak.into()),
-            NewItemBreakResult::Text(s) => CheckResult::Text(s),
-        }
+        Item::check_star_paragraph(line).into_check_result('*')
     }
 
+    /// Checks if the line is the beginning of a list assuming the first char is a `'-'` and the
+    /// line comes after a paragraph
     pub fn check_dash_paragraph(line: SkipIndent) -> CheckOrSetextResult {
         Item::check_dash_paragraph(line)
     }
 
+    /// Checks if the line is the beginning of a list assuming the first char is a `'+'` and the
+    /// line doesn't come after a paragraph
     pub fn check_plus(line: SkipIndent) -> CheckResult {
-        match Item::check_plus(line) {
-            NewItemResult::New(i) =>
-                CheckResult::New(Self::new(i, ListType::Unordered('+')).into()),
-            NewItemResult::Text(s) => CheckResult::Text(s),
-        }
+        Item::check_plus(line).into_check_result('+')
     }
 
+    /// Checks if the line is the beginning of a list assuming the first char is a `'+'` and the
+    /// line comes after a paragraph
     pub fn check_plus_paragraph(line: SkipIndent) -> CheckResult {
-        match Item::check_plus_paragraph(line) {
-            NewItemResult::New(i) =>
-                CheckResult::New(Self::new(i, ListType::Unordered('+')).into()),
-            NewItemResult::Text(s) => CheckResult::Text(s),
-        }
+        Item::check_plus_paragraph(line).into_check_result('+')
     }
 
+    /// Checks if the line is the beginning of a list assuming the first char is a digit from and
+    /// the line doesn't come after a paragraph
     pub fn check_number(line: SkipIndent) -> CheckResult {
-        match Item::check_number(line) {
-            NewOrderedItemResult::New(i, o) =>
-                CheckResult::New(Self::new(i, ListType::Ordered(o)).into()),
-            NewOrderedItemResult::Text(s) => CheckResult::Text(s),
-        }
+        Item::check_number(line).into_check_result()
     }
 
+    /// Checks if the line is the beginning of a list assuming the first char is `'1'`  and the line
+    /// comes after a paragraph
     pub fn check_number_paragraph(line: SkipIndent) -> CheckResult {
         Item::check_number_paragraph(line)
     }
 
+    /// Parses a non-blank line of a document
     pub fn next(&mut self, mut line: SkipIndent, links: &mut Links) -> LineResult {
         if let Some(current) = self.current.as_mut()
             && line.indent >= current.indent + current.width
@@ -98,9 +96,38 @@ impl List {
                 None => LineResult::DoneSelfAndNew(IndentedCodeBlock::new(line).into()),
             }
         } else {
-            let line = match self.check_matching(line) {
-                CheckMatchingResult::LineResult(r) => return r,
-                CheckMatchingResult::Text(s) => s,
+            // Check for list items, if matching the type
+            let line = match &self.list_type {
+                ListType::Unordered('+') if line.first == '+' => match Item::check_plus(line) {
+                    NewItemResult::New(i) => {
+                        self.add_item(i, links);
+                        return LineResult::None;
+                    },
+                    NewItemResult::Text(s) => s,
+                },
+                ListType::Unordered(c) if line.first == *c => match Item::check_star_dash(line) {
+                    NewItemBreakResult::New(i) => {
+                        self.add_item(i, links);
+                        return LineResult::None;
+                    },
+                    NewItemBreakResult::Break =>
+                        return LineResult::DoneSelfAndOther(ThematicBreak.into()),
+                    NewItemBreakResult::Text(s) => s,
+                },
+                ListType::Ordered(Ordered { closing, .. }) if line.first.is_ascii_digit() =>
+                    match Item::check_number(line) {
+                        NewOrderedItemResult::New(i, o) =>
+                            return if o.closing == *closing {
+                                self.add_item(i, links);
+                                LineResult::None
+                            } else {
+                                LineResult::DoneSelfAndNew(
+                                    Self::new(i, ListType::Ordered(o)).into(),
+                                )
+                            },
+                        NewOrderedItemResult::Text(s) => s,
+                    },
+                _ => line,
             };
             match self.current.as_mut() {
                 Some(s) => s.current.next_continuation(line),
@@ -109,77 +136,14 @@ impl List {
         }
     }
 
-    fn ends_with_gap(&self) -> bool { self.current.as_ref().map_or(true, Item::ends_with_gap) }
-
-    fn check_end(&mut self) {
-        if self.current.as_ref().is_some_and(|i| i.loose) {
-            self.loose = true;
-        }
-    }
-
-    fn add_item(&mut self, new: Item) {
-        let old = self.current.replace(new);
-        if !self.loose
-            && (old.is_none() || old.as_ref().is_some_and(|i| i.loose || i.ends_with_gap()))
-        {
-            self.loose = true;
-        }
-        if let Some(old) = old {
-            self.items.push(old);
-        }
-    }
-
-    fn check_matching<'a>(&mut self, line: SkipIndent<'a>) -> CheckMatchingResult<'a> {
-        match &self.list_type {
-            ListType::Unordered('+') => match line.first {
-                '+' => match Item::check_plus(line) {
-                    NewItemResult::New(i) => {
-                        self.add_item(i);
-                        CheckMatchingResult::LineResult(LineResult::None)
-                    },
-                    NewItemResult::Text(s) => CheckMatchingResult::Text(s),
-                },
-                _ => CheckMatchingResult::Text(line),
-            },
-            ListType::Unordered(c) =>
-                if line.first == *c {
-                    match Item::check_star_dash(line) {
-                        NewItemBreakResult::New(i) => {
-                            self.add_item(i);
-                            CheckMatchingResult::LineResult(LineResult::None)
-                        },
-                        NewItemBreakResult::Break => CheckMatchingResult::LineResult(
-                            LineResult::DoneSelfAndOther(ThematicBreak.into()),
-                        ),
-                        NewItemBreakResult::Text(s) => CheckMatchingResult::Text(s),
-                    }
-                } else {
-                    CheckMatchingResult::Text(line)
-                },
-            ListType::Ordered(Ordered { closing, .. }) => match line.first {
-                '0'..='9' => match Item::check_number(line) {
-                    NewOrderedItemResult::New(i, o) =>
-                        if o.closing == *closing {
-                            self.add_item(i);
-                            CheckMatchingResult::LineResult(LineResult::None)
-                        } else {
-                            CheckMatchingResult::LineResult(LineResult::DoneSelfAndNew(
-                                Self::new(i, ListType::Ordered(o)).into(),
-                            ))
-                        },
-                    NewOrderedItemResult::Text(s) => CheckMatchingResult::Text(s),
-                },
-                _ => CheckMatchingResult::Text(line),
-            },
-        }
-    }
-
+    /// Parses a blank line of a document
     pub fn next_blank(&mut self, indent: usize, links: &mut Links) {
         if self.current.as_mut().is_some_and(|i| i.next_blank(indent, links)) {
             self.items.push(self.current.take().unwrap());
         }
     }
 
+    /// Finishes the list into a [`Block`]
     pub fn finish(mut self) -> Block {
         self.check_end();
         let done =
@@ -190,42 +154,104 @@ impl List {
                 Block::OrderedList(new_list_attributes(starting, closing), done),
         }
     }
+
+    /// Returns whether the list ends with a blank line
+    pub fn ends_with_blank(&self) -> bool {
+        self.current.as_ref().map_or(true, Item::ends_with_blank)
+    }
+
+    /// Checks last item to see if the list should be loose
+    fn check_end(&mut self) {
+        if self.current.as_ref().is_some_and(|i| i.loose) {
+            self.loose = true;
+        }
+    }
+
+    /// Adds item to the list checking if the list should be loose
+    fn add_item(&mut self, new: Item, links: &mut Links) {
+        let old = self.current.replace(new);
+        if !self.loose
+            && (old.is_none() || old.as_ref().is_some_and(|i| i.loose || i.ends_with_blank()))
+        {
+            self.loose = true;
+        }
+        if let Some(mut old) = old {
+            old.current.finish_links(links);
+            self.items.push(old);
+        }
+    }
 }
 
-enum CheckMatchingResult<'a> {
-    LineResult(LineResult),
-    Text(SkipIndent<'a>),
-}
-
+/// Struct representing a single [`List`] item
 #[derive(Debug)]
 pub struct Item {
+    /// Finished blocks
     finished: Vec<TempBlock>,
+    /// Current block
     pub current: Box<TempBlock>,
+    /// Width of the list item marker (marker + spaces)
     width: usize,
+    /// Indent of the list item marker
     indent: usize,
+    /// Whether item ends with a blank line
     gap: bool,
+    /// Whether item makes the [`List`] it's a part of loose
     loose: bool,
 }
 
+/// Result of checking a list item beginning with a `'-'` after a paragraph
 pub enum CheckOrSetextResult<'a> {
     Check(CheckResult<'a>),
     Setext(usize),
 }
 
+/// Result of checking a list item
 enum NewItemResult<'a> {
     New(Item),
     Text(SkipIndent<'a>),
 }
 
+impl<'a> NewItemResult<'a> {
+    fn into_check_result(self, c: char) -> CheckResult<'a> {
+        match self {
+            NewItemResult::New(i) => CheckResult::New(List::new(i, ListType::Unordered(c)).into()),
+            NewItemResult::Text(s) => CheckResult::Text(s),
+        }
+    }
+}
+
+/// Result of checking a list item when a thematic break is also possible
 enum NewItemBreakResult<'a> {
     New(Item),
     Break,
     Text(SkipIndent<'a>),
 }
 
+impl<'a> NewItemBreakResult<'a> {
+    fn into_check_result(self, c: char) -> CheckResult<'a> {
+        match self {
+            NewItemBreakResult::New(i) =>
+                CheckResult::New(List::new(i, ListType::Unordered(c)).into()),
+            NewItemBreakResult::Break => CheckResult::Done(ThematicBreak.into()),
+            NewItemBreakResult::Text(s) => CheckResult::Text(s),
+        }
+    }
+}
+
+/// Result of checking an ordered list item
 enum NewOrderedItemResult<'a> {
     New(Item, Ordered),
     Text(SkipIndent<'a>),
+}
+
+impl<'a> NewOrderedItemResult<'a> {
+    fn into_check_result(self) -> CheckResult<'a> {
+        match self {
+            NewOrderedItemResult::New(i, o) =>
+                CheckResult::New(List::new(i, ListType::Ordered(o)).into()),
+            NewOrderedItemResult::Text(s) => CheckResult::Text(s),
+        }
+    }
 }
 
 impl<'a> From<NewItemResult<'a>> for NewItemBreakResult<'a> {
@@ -238,6 +264,7 @@ impl<'a> From<NewItemResult<'a>> for NewItemBreakResult<'a> {
 }
 
 impl Item {
+    /// Creates a new item without any blocks
     fn new_empty(width: usize, indent: usize) -> Self {
         Self {
             finished: Vec::new(),
@@ -249,11 +276,13 @@ impl Item {
         }
     }
 
+    /// Creates a new item parsing the first line into a block
     fn new(width: usize, indent: usize, content: SkipIndent) -> Self {
         let (current, finished) = TempBlock::new_empty_known_indent(content);
         Self { finished, current: Box::new(current), width, indent, gap: false, loose: false }
     }
 
+    /// Creates a new item with the first block being a [`IndentedCodeBlock`]
     fn new_code(width: usize, indent: usize, mut content: SkipIndent) -> Self {
         content.move_indent(1);
         Self {
@@ -266,6 +295,8 @@ impl Item {
         }
     }
 
+    /// Checks if a line begins a list item assuming it starts with a `'*'` or a `'-'` and the line
+    /// doesn't come after a paragraph
     fn check_star_dash(line: SkipIndent) -> NewItemBreakResult {
         match line.skip_indent_rest() {
             SkipIndentResult::Line(rest) => Self::check_star_dash_known(line, rest),
@@ -273,6 +304,8 @@ impl Item {
         }
     }
 
+    /// Checks if a line begins a list item assuming it starts with a `'*'` and the line comes after
+    /// a paragraph
     fn check_star_paragraph(line: SkipIndent) -> NewItemBreakResult {
         match line.skip_indent_rest() {
             SkipIndentResult::Line(rest) => Self::check_star_dash_known(line, rest),
@@ -280,6 +313,9 @@ impl Item {
         }
     }
 
+    /// Checks if a line begins a list item knowing the rest of the line is a non-blank line and
+    /// assuming the line either starts with a `'*'` or it starts with a `'-'` and comes after the
+    /// paragraph
     fn check_star_dash_known<'a>(
         line: SkipIndent<'a>, rest: SkipIndent<'a>,
     ) -> NewItemBreakResult<'a> {
@@ -290,6 +326,8 @@ impl Item {
         }
     }
 
+    /// Checks if a line begins a list item assuming it starts with a `'-'` and the line comes after
+    /// a paragraph
     fn check_dash_paragraph(line: SkipIndent) -> CheckOrSetextResult {
         match line.skip_indent_rest() {
             SkipIndentResult::Line(rest) =>
@@ -311,6 +349,8 @@ impl Item {
         }
     }
 
+    /// Checks if a line begins a list item assuming it starts with a `'+'` and the line doesn't
+    /// come after a paragraph
     fn check_plus(line: SkipIndent) -> NewItemResult {
         match line.skip_indent_rest() {
             SkipIndentResult::Line(rest) => Self::check_unordered_known(line, rest),
@@ -318,6 +358,8 @@ impl Item {
         }
     }
 
+    /// Checks if a line begins a list item assuming it starts with a `'+'` and the line comes after
+    /// a paragraph
     fn check_plus_paragraph(line: SkipIndent) -> NewItemResult {
         match line.skip_indent_rest() {
             SkipIndentResult::Line(rest) => Self::check_unordered_known(line, rest),
@@ -325,6 +367,8 @@ impl Item {
         }
     }
 
+    /// Checks if a line begins a list item knowing the rest of the line is not empty and assuming
+    /// all other necessary checks that would prevent a list item from beginning were passed
     fn check_unordered_known<'a>(line: SkipIndent<'a>, rest: SkipIndent<'a>) -> NewItemResult<'a> {
         match rest.indent {
             0 => NewItemResult::Text(line),
@@ -333,6 +377,8 @@ impl Item {
         }
     }
 
+    /// Checks if a line begins a list item assuming it starts with a digit and the line doesn't
+    /// come after a paragraph
     fn check_number(line: SkipIndent) -> NewOrderedItemResult {
         let mut iter = line.indent_iter_rest();
         let (Some((starting, width)), Some(closing)) =
@@ -360,6 +406,8 @@ impl Item {
         }
     }
 
+    /// Checks if a line begins a list item assuming it starts with a `'1'` and the line comes after
+    /// a paragraph
     fn check_number_paragraph(line: SkipIndent) -> CheckResult {
         let mut iter = line.indent_iter_rest();
         let Some(closing) = iter.get_closing() else {
@@ -380,10 +428,10 @@ impl Item {
         }
     }
 
-    fn ends_with_gap(&self) -> bool {
-        self.gap || matches!(self.current.as_ref(), TempBlock::List(l) if l.ends_with_gap())
-    }
+    /// Returns whether this item ends with a blank line
+    fn ends_with_blank(&self) -> bool { self.gap || self.current.ends_with_gap() }
 
+    /// Checks if a given line is a thematic break
     fn check_thematic(line: &SkipIndent, rest: &SkipIndent) -> bool {
         if line.first != rest.first {
             return false;
@@ -399,6 +447,7 @@ impl Item {
         third
     }
 
+    /// Checks if a given line is a thematic break or a setext heading underline
     fn check_thematic_setext<'a>(
         line: SkipIndent<'a>, rest: &SkipIndent,
     ) -> CheckOrSetextResult<'a> {
@@ -413,7 +462,7 @@ impl Item {
                         thematic = true;
                     }
                     count += 1;
-            },
+                },
                 _ => return CheckOrSetextResult::Check(CheckResult::Text(line)),
             }
         }
@@ -424,12 +473,12 @@ impl Item {
         }
     }
 
+    /// Parses a non-blank line of the document
     fn next_line(&mut self, line: SkipIndent, links: &mut Links) {
         let result = self.current.next_line(line, links);
         if !self.loose
             && (result.is_done_or_new() && self.gap
-                || result.is_done_self_and_new_or_other()
-                    && self.current.as_list().is_some_and(List::ends_with_gap))
+                || result.is_done_self_and_new_or_other() && self.current.ends_with_gap())
         {
             self.loose = true;
         }
@@ -437,6 +486,8 @@ impl Item {
         self.current.apply_result(result, &mut self.finished, links);
     }
 
+    /// Parses a blank line of the document and returns whether this line ends a list item (an empty
+    /// list item has to have content at it's second line)
     fn next_blank(&mut self, indent: usize, links: &mut Links) -> bool {
         if self.current.is_empty() && self.finished.is_empty() {
             return true;
@@ -448,6 +499,7 @@ impl Item {
         false
     }
 
+    /// Finishes this item into a [`Vec`] of [`Block`] elements
     fn finish(self, loose: bool) -> Vec<Block> {
         let temp = self
             .finished
@@ -464,5 +516,4 @@ impl Item {
             .collect()
         }
     }
-
 }
