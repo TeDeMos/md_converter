@@ -62,3 +62,40 @@ impl IndentedCodeBlock {
         Block::CodeBlock(attr_empty(), self.content)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    fn new() -> IndentedCodeBlock {
+        IndentedCodeBlock::new(SkipIndent::skip("    content", 0).into_line())
+    }
+    
+    fn finish(code: IndentedCodeBlock) -> String {
+        let Block::CodeBlock(_, s) = code.finish() else { panic!() };
+        s
+    }
+    
+    fn push(code: &mut IndentedCodeBlock, line: &str) {
+        code.push(SkipIndent::skip(line, 0).into_line());
+    }
+    
+    #[test]
+    fn test_trimming() {
+        let result = finish(new());
+        assert!(result.ends_with("content"));
+        let mut code = new();
+        push(&mut code, "    next");
+        let result = finish(code);
+        assert!(result.ends_with("next"));
+        let mut code = new();
+        code.push_blank(10);
+        let result = finish(code);
+        assert!(result.ends_with("content"));
+        let mut code = new();
+        code.push_blank(10);
+        push(&mut code, "    next");
+        let result = finish(code);
+        assert!(result.ends_with("next"));
+    }
+}

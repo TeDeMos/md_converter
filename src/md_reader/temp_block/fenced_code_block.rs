@@ -84,3 +84,96 @@ impl FencedCodeBlock {
         Block::CodeBlock((String::new(), info, Vec::new()), self.content)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::md_reader::temp_block::TempBlock;
+    use super::*;
+
+    fn assert_new(line: &str) {
+        assert!(matches!(
+            FencedCodeBlock::check(SkipIndent::skip(line, 0).into_line()),
+            CheckResult::New(_)
+        ));
+    }
+
+    fn assert_text(line: &str) {
+        assert!(matches!(
+            FencedCodeBlock::check(SkipIndent::skip(line, 0).into_line()),
+            CheckResult::Text(_)
+        ));
+    }
+    
+    fn new(line: &str) -> FencedCodeBlock {
+        match FencedCodeBlock::check(SkipIndent::skip(line, 0).into_line()) {
+            CheckResult::New(TempBlock::FencedCodeBlock(f)) => f,
+            _ => panic!(),
+        }
+    }
+    
+    fn assert_closes(open: &str, close: &str) {
+        let mut block = new(open);
+        let result = block.next(SkipIndent::skip(close, 0).into_line());
+        assert!(matches!(result, LineResult::DoneSelf));
+    }
+
+    fn assert_consumes(open: &str, close: &str) {
+        let mut block = new(open);
+        let result = block.next(SkipIndent::skip(close, 0).into_line());
+        assert!(matches!(result, LineResult::None));
+    }
+    
+    fn assert_space_count(open: &str, line: &str, expected: usize) {
+        let mut block = new(open);
+        block.next(SkipIndent::skip(line, 0).into_line());
+        assert_eq!(block.content.chars().take_while(|&c| c == ' ').count(), expected);
+    }
+
+    #[test]
+    fn opening_length() {
+        assert_new("```");
+        assert_new("~~~");
+        assert_new("```````````");
+        assert_new("~~~~~~~~~~");
+        assert_text("``");
+        assert_text("~~");
+    }
+
+    #[test]
+    fn info_string() {
+        assert_new("``` info string");
+        assert_new("~~~ info string");
+        assert_text("``` info``string");
+        assert_new("~~~ info``string");
+        assert_new("``` info~~string");
+        assert_new("~~~ info~~string");
+    }
+
+    #[test]
+    fn closing() {
+        assert_closes("```", "```");
+        assert_closes("~~~",  "~~~");
+        assert_consumes("```", "~~~");
+        assert_consumes("~~~", "```");
+        assert_consumes("`````", "```");
+        assert_closes("```", "``````");
+        assert_closes("  ```", "```");
+        assert_closes("  ```", "   ```");
+        assert_consumes("  ```", "    ```");
+        assert_consumes("~~~", "~~~ ~~~");
+        assert_consumes("~~~", "~~~ abc");
+    }
+    
+    #[test]
+    fn indent() {
+        assert_space_count("```", "content", 0);
+        assert_space_count("```", "  content", 2);
+        assert_space_count("```", "    content", 4);
+        assert_space_count("  ```", "content", 0);
+        assert_space_count("  ```", "  content", 0);
+        assert_space_count("  ```", "    content", 2);
+        assert_space_count("   ```", "content", 0);
+        assert_space_count("   ```", "  content", 0);
+        assert_space_count("   ```", "    content", 1);
+    }
+}

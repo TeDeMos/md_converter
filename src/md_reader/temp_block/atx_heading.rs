@@ -42,3 +42,53 @@ impl AtxHeading {
         Block::new_header(self.level, InlineParser::parse_lines(&self.content))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::md_reader::temp_block::TempBlock;
+
+    fn assert_done(line: &str) {
+        assert!(matches!(
+            AtxHeading::check(SkipIndent::skip(line, 0).into_line()),
+            CheckResult::Done(_)
+        ));
+    }
+
+    fn assert_text(line: &str) {
+        assert!(matches!(
+            AtxHeading::check(SkipIndent::skip(line, 0).into_line()),
+            CheckResult::Text(_)
+        ));
+    }
+
+    fn assert_equals(line: &str, expected: &str) {
+        assert!(matches!(
+            AtxHeading::check(SkipIndent::skip(line, 0).into_line()),
+            CheckResult::Done(TempBlock::AtxHeading(AtxHeading { content, .. })) if content == expected
+        ));
+    }
+
+    #[test]
+    fn length() {
+        assert_done("# foo");
+        assert_done("###### foo");
+        assert_text("####### foo");
+    }
+
+    #[test]
+    fn whitespace() {
+        assert_done("#");
+        assert_text("#foo");
+        assert_done("#                              foo");
+    }
+
+    #[test]
+    fn closing() {
+        assert_equals("# foo #", "foo");
+        assert_equals("# foo#", "foo#");
+        assert_equals("# foo ##################", "foo");
+        assert_equals("# #", "");
+        assert_equals("# foo #    \t    ", "foo");
+    }
+}

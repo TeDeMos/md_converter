@@ -6,7 +6,7 @@ use std::fs;
 
 use clap::builder::PossibleValuesParser;
 use clap::{Arg, ArgAction, Command};
-use md_converter::ast::Pandoc;
+use md_converter::ast::{Inline, Pandoc};
 use md_converter::latex_writer::LatexWriter;
 use md_converter::md_reader::inline_parser::InlineParser;
 use md_converter::md_reader::MdReader;
@@ -18,7 +18,8 @@ use md_converter::typst_writer::TypstWriter;
 fn main() {
     let test = "* a *";
     let res = InlineParser::parse_lines(test);
-
+    let a = Inline::Str("aaa".into());
+    dbg!(a);
     // run()
     // let result = MdReader::read(
     //     "a\n:-"
