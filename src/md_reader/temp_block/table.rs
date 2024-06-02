@@ -64,7 +64,11 @@ impl Table {
 
     /// Checks how many columns a table header defined by this line has
     pub fn check_header(line: &str) -> usize {
-        let mut iter = line.chars();
+        let trimmed = line.trim();
+        if trimmed == "|" {
+            return 0;
+        }
+        let mut iter = line.trim().chars();
         let mut count = 1;
         let mut escape = iter.next() == Some('\\');
         let mut detected = false;
@@ -105,5 +109,67 @@ impl Table {
                 Some(c) => current.push(c),
             };
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn header_row() {
+        assert_eq!(Table::check_header("|"), 0);
+        assert_eq!(Table::check_header("||"), 1);
+        assert_eq!(Table::check_header("|||"), 2);
+        assert_eq!(Table::check_header("||||"), 3);
+        assert_eq!(Table::check_header("\\|"), 1);
+        assert_eq!(Table::check_header("|\\|"), 1);
+        assert_eq!(Table::check_header("no"), 1);
+        assert_eq!(Table::check_header("|leading"), 1);
+        assert_eq!(Table::check_header("trailing|"), 1);
+        assert_eq!(Table::check_header("|both|"), 1);
+        assert_eq!(Table::check_header("|many|many"), 2);
+        assert_eq!(Table::check_header("many|many\\|many"), 2);
+    }
+
+    fn check_delimeter(line: &str, size: usize) -> bool {
+        let mut paragraph = Paragraph::new(&SkipIndent::skip(&"|".repeat(size + 1), 0).into_line());
+        matches!(
+            Table::check(SkipIndent::skip(line, 0).into_line(), &mut paragraph),
+            NewResult::New(_)
+        )
+    }
+
+    #[test]
+    fn delimeter_row() {
+        assert!(!check_delimeter(":", 1));
+        assert!(!check_delimeter("::", 1));
+        assert!(check_delimeter(":-", 1));
+        assert!(check_delimeter("-:", 1));
+        assert!(check_delimeter("-:", 1));
+        assert!(check_delimeter("|-:", 1));
+        assert!(check_delimeter(":-|", 1));
+        assert!(check_delimeter("|-|", 1));
+        assert!(check_delimeter("-|-", 2));
+        assert!(check_delimeter("|:-----:|----|", 2));
+        assert!(!check_delimeter("|:-----:|::--|", 2));
+    }
+
+    fn push(line: &str, size: usize, expected: &[&str]) {
+        let mut table = Table { alignments: vec![Alignment::Center; size], rows: Vec::new() };
+        table.push(line);
+        let result: Vec<_> = table.rows.last().unwrap().iter().map(String::as_str).collect();
+        assert_eq!(result, expected);
+    }
+    
+    #[test]
+    fn check_push() {
+        push("|", 1, &[""]);
+        push("|", 2, &["", ""]);
+        push("aaa", 2, &["aaa", ""]);
+        push("aaa|", 2, &["aaa", ""]);
+        push("|aaa", 2, &["aaa", ""]);
+        push("|aaa|a", 2, &["aaa", "a"]);
+        push("|aaa\\|aaa|", 2, &["aaa|aaa", ""]);
     }
 }

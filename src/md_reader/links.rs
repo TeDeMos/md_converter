@@ -43,4 +43,6 @@ impl Links {
     }
 
     pub fn get(&self, stripped: &str) -> Option<&Link> { self.0.get(stripped) }
+    
+    pub fn len(&self) -> usize { self.0.len() }
 }
