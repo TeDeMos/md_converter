@@ -49,3 +49,56 @@ impl BlockQuote {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    fn new(line: &str) -> BlockQuote {
+        BlockQuote::new(&SkipIndent::skip(line, 0).into_line())
+    }
+
+    fn next(block_quote: &mut BlockQuote, line: &str) -> LineResult {
+        block_quote.next(SkipIndent::skip(line, 0).into_line(), &mut Links::new())
+    }
+    
+    fn assert_consumed(block_quote: &mut BlockQuote, line: &str) {
+        assert!(matches!(next(block_quote, line), LineResult::None));
+    }
+
+    fn assert_new(block_quote: &mut BlockQuote, line: &str) {
+        assert!(matches!(next(block_quote, line), LineResult::DoneSelfAndNew(_)));
+    }
+    
+    #[test]
+    fn gt_continues() {
+        let mut para = new("> line");
+        assert_consumed(&mut para, "> next");
+        let mut other = new("> ***");
+        assert_consumed(&mut other, "> next");
+    }
+    
+    #[test]
+    fn continuation() {
+        let mut para = new("> line");
+        assert_consumed(&mut para, "next");
+        let mut other = new("> ***");
+        assert_new(&mut other, "next");
+    }
+    
+    #[test]
+    fn indented_continuation() {
+        let mut para = new("> line");
+        assert_consumed(&mut para, "    next");
+        let mut other = new("> ***");
+        assert_new(&mut other, "    next");
+    }
+    
+    #[test]
+    fn nested_continuation() {
+        let mut block = new(">>> nested");
+        assert_consumed(&mut block, " next");
+        assert_consumed(&mut block, ">> next");
+        assert_consumed(&mut block, "> next");
+    }
+}

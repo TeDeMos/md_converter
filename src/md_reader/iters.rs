@@ -13,6 +13,13 @@ impl<'a> SkipIndentResult<'a> {
             SkipIndentResult::Blank(i) => *i = i.saturating_sub(indent),
         }
     }
+    
+    pub fn into_line(self) -> SkipIndent<'a> {
+        match self {
+            SkipIndentResult::Line(s) => s,
+            SkipIndentResult::Blank(i) => panic!(),
+        }
+    }
 }
 
 pub struct SkipIndent<'a> {
@@ -324,10 +331,11 @@ impl<'a> RevIter<'a> {
 
     pub fn next_if_whitespace_or_none(&mut self) -> bool {
         match self.iter.peek() {
-            Some((_, ' ' | '\t')) | None => {
+            Some((_, ' ' | '\t')) => {
                 self.iter.next();
                 true
             },
+            None => true,
             Some(_) => false,
         }
     }

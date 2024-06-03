@@ -170,18 +170,14 @@ impl Paragraph {
     /// full [`Table`] check - check if a table is created and if not check whether the new
     /// line can be a table header.
     fn push_check_setext(&mut self, line: SkipIndent) -> LineResult {
-        let mut whitespace = false;
-        let mut iter = line.line.chars();
-        loop {
-            match iter.next() {
-                Some('=') if !whitespace => continue,
-                Some(' ' | '\t') => whitespace = true,
-                Some(_) => return self.push_full_check(line),
-                None => {
-                    self.setext = 1;
-                    return LineResult::DoneSelf;
-                },
-            }
+        let mut iter = line.iter_rest();
+        iter.skip_while_eq('=');
+        iter.skip_whitespace();
+        if iter.ended() {
+            self.setext = 1;
+            LineResult::DoneSelf
+        } else {
+            self.push_full_check(line)
         }
     }
 
@@ -223,5 +219,72 @@ impl Paragraph {
         self.content.push('\n');
         self.line_start = self.content.len();
         self.content.push_str(line.trim_end());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn get_links<'a, I>(i: I) -> (Paragraph, Links)
+    where I: IntoIterator<Item = &'a str> {
+        let mut iter = i.into_iter();
+        let mut paragraph = Paragraph::new(&SkipIndent::skip(iter.next().unwrap(), 0).into_line());
+        for s in iter {
+            assert!(matches!(
+                paragraph.next(SkipIndent::skip(s, 0).into_line()),
+                LineResult::None | LineResult::DoneSelf
+            ));
+        }
+        let mut links = Links::new();
+        paragraph.add_links(&mut links);
+        (paragraph, links)
+    }
+
+    fn assert_links<'a, I>(i: I, paragraph: bool, links: usize)
+    where I: IntoIterator<Item = &'a str> {
+        let (p, l) = get_links(i);
+        assert_eq!(p.finish().is_some(), paragraph);
+        assert_eq!(l.len(), links);
+    }
+
+    #[test]
+    fn test_links() {
+        assert_links(["[foo]: url 'test'"], false, 1);
+        assert_links(["line", "[foo]: url 'test'"], true, 0);
+        assert_links(["[foo[]]: url 'test'"], true, 0);
+        assert_links([(String::from("[") + &"a".repeat(1000) + "]: url 'test'").as_str()], true, 0);
+        assert_links(["[      ]: url 'test'"], true, 0);
+        assert_links(["[foo]:url 'test'"], false, 1);
+        assert_links(["[foo]:                           url 'test'"], false, 1);
+        assert_links(["[foo] url 'test'"], true, 0);
+        assert_links(["[foo]:"], true, 0);
+        assert_links(["[foo]:", "url"], false, 1);
+        assert_links(["[foo]:", "url with space"], true, 0);
+        assert_links(["[foo]:", "url_with", "linebreak"], true, 1);
+        assert_links(["[foo]: <>"], false, 1);
+        assert_links(["[foo]: <url>"], false, 1);
+        assert_links(["[foo]: <url with spaces>"], false, 1);
+        assert_links(["[foo]: <url with <>>"], true, 0);
+        assert_links(["[foo]: <url with \\<\\>>"], false, 1);
+        assert_links(["[foo]: <url with", "linebreak>"], true, 0);
+        assert_links(["[foo]: url \"quotes"], true, 0);
+        assert_links(["[foo]: url \"quotes\""], false, 1);
+        assert_links(["[foo]: url \"quo\"tes\""], true, 0);
+        assert_links(["[foo]: url \"quo\\\"tes\""], false, 1);
+        assert_links(["[foo]: url 'quotes"], true, 0);
+        assert_links(["[foo]: url 'quotes'"], false, 1);
+        assert_links(["[foo]: url 'quo'tes'"], true, 0);
+        assert_links(["[foo]: url 'quo\\'tes'"], false, 1);
+        assert_links(["[foo]: url (brackets"], true, 0);
+        assert_links(["[foo]: url (brackets)"], false, 1);
+        assert_links(["[foo]: url (brack()ets)"], true, 0);
+        assert_links(["[foo]: url (brack\\(\\)ets)"], false, 1);
+        assert_links(["[foo]:", "url", "'title'"], false, 1);
+        assert_links(["[foo]:", "url", "'title", "title", "title'"], false, 1);
+        assert_links(["[foo]: url 'title'", "[other]: url 'other'"], false, 2);
+        assert_links(["[foo]: url 'title'", "[foo]: url 'other'"], false, 1);
+        assert_links(["[foo]: url 'title'", "======"], true, 1);
+        assert_links(["[foo]: url 'title'", "------"], true, 1);
     }
 }

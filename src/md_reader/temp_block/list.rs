@@ -517,3 +517,263 @@ impl Item {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn new_dash(line: &str) -> List {
+        match List::check_star_dash(SkipIndent::skip(line, 0).into_line()) {
+            CheckResult::New(TempBlock::List(l)) => l,
+            _ => panic!(),
+        }
+    }
+
+    fn new_plus(line: &str) -> List {
+        match List::check_plus(SkipIndent::skip(line, 0).into_line()) {
+            CheckResult::New(TempBlock::List(l)) => l,
+            _ => panic!(),
+        }
+    }
+
+    fn new_number(line: &str) -> List {
+        match List::check_number(SkipIndent::skip(line, 0).into_line()) {
+            CheckResult::New(TempBlock::List(l)) => l,
+            _ => panic!(),
+        }
+    }
+
+    fn next(list: &mut List, line: &str) -> LineResult {
+        list.next(SkipIndent::skip(line, 0).into_line(), &mut Links::new())
+    }
+
+    fn next_blank(list: &mut List) { list.next_blank(0, &mut Links::new()); }
+
+    #[test]
+    fn next_item_indent() {
+        let mut list = new_dash("  -  line");
+        assert!(matches!(next(&mut list, "     next"), LineResult::None));
+        assert!(matches!(next(&mut list, "     - list"), LineResult::None));
+        assert!(list.items.is_empty());
+        assert!(list.current.is_some_and(
+            |i| i.finished.len() == 1 && matches!(i.current.as_ref(), TempBlock::List(_))
+        ));
+        let mut list = new_dash("  -");
+        next_blank(&mut list);
+        assert!(matches!(next(&mut list, "     next"), LineResult::DoneSelfAndNew(_)));
+    }
+
+    #[test]
+    fn next_indent() {
+        let mut list = new_dash("   -  line");
+        assert!(matches!(next(&mut list, "    text"), LineResult::None));
+        assert!(matches!(next(&mut list, "    - list"), LineResult::None));
+        assert!(list.items.is_empty());
+        assert!(list.current.is_some_and(|i| i.finished.is_empty()));
+        let mut list = new_dash("   -  ***");
+        assert!(matches!(
+            next(&mut list, "    text"),
+            LineResult::DoneSelfAndNew(TempBlock::IndentedCodeBlock(_))
+        ));
+        let mut list = new_dash("   -  ***");
+        assert!(matches!(
+            next(&mut list, "    - list"),
+            LineResult::DoneSelfAndNew(TempBlock::IndentedCodeBlock(_))
+        ));
+        let mut list = new_dash("   -");
+        assert!(matches!(
+            next(&mut list, "    text"),
+            LineResult::DoneSelfAndNew(TempBlock::IndentedCodeBlock(_))
+        ));
+        let mut list = new_dash("   -");
+        assert!(matches!(
+            next(&mut list, "    - list"),
+            LineResult::DoneSelfAndNew(TempBlock::IndentedCodeBlock(_))
+        ));
+        let mut list = new_dash("   -");
+        next_blank(&mut list);
+        assert!(matches!(
+            next(&mut list, "    text"),
+            LineResult::DoneSelfAndNew(TempBlock::IndentedCodeBlock(_))
+        ));
+        let mut list = new_dash("   -");
+        next_blank(&mut list);
+        assert!(matches!(
+            next(&mut list, "    - list"),
+            LineResult::DoneSelfAndNew(TempBlock::IndentedCodeBlock(_))
+        ));
+    }
+
+    #[test]
+    fn matching_list_item() {
+        let mut list = new_plus("+ list");
+        assert!(matches!(next(&mut list, "+ item"), LineResult::None));
+        assert_eq!(list.items.len(), 1);
+        assert!(matches!(
+            next(&mut list, "- item"),
+            LineResult::DoneSelfAndNew(TempBlock::List(_))
+        ));
+        let mut list = new_dash("- list");
+        assert!(matches!(next(&mut list, "- item"), LineResult::None));
+        assert_eq!(list.items.len(), 1);
+        assert!(matches!(
+            next(&mut list, "- - -"),
+            LineResult::DoneSelfAndOther(TempBlock::ThematicBreak(_))
+        ));
+        let mut list = new_dash("- list");
+        assert!(matches!(
+            next(&mut list, "* item"),
+            LineResult::DoneSelfAndNew(TempBlock::List(_))
+        ));
+        let mut list = new_number("123. list");
+        assert!(matches!(next(&mut list, "456. item"), LineResult::None));
+        assert_eq!(list.items.len(), 1);
+        assert!(matches!(
+            next(&mut list, "789) item"),
+            LineResult::DoneSelfAndNew(TempBlock::List(_))
+        ));
+    }
+
+    #[test]
+    fn next_no_indent() {
+        let mut list = new_dash("- list");
+        assert!(matches!(next(&mut list, "paragraph"), LineResult::None));
+        assert!(list.items.is_empty());
+        assert!(matches!(
+            next(&mut list, "2. list"),
+            LineResult::DoneSelfAndNew(TempBlock::List(_))
+        ));
+        let mut list = new_dash("- ***");
+        assert!(matches!(
+            next(&mut list, "paragraph"),
+            LineResult::DoneSelfAndNew(TempBlock::Paragraph(_))
+        ));
+        let mut list = new_dash("-");
+        next_blank(&mut list);
+        assert!(matches!(next(&mut list, "-"), LineResult::None));
+        assert_eq!(list.items.len(), 1);
+        next_blank(&mut list);
+        assert!(matches!(
+            next(&mut list, "paragraph"),
+            LineResult::DoneSelfAndNew(TempBlock::Paragraph(_))
+        ));
+    }
+
+    fn new_dash_all<I>(i: I) -> List
+    where I: IntoIterator<Item = &'static str> {
+        let mut iter = i.into_iter();
+        let mut list = new_dash(iter.next().unwrap());
+        for s in iter {
+            if s.is_empty() {
+                next_blank(&mut list);
+            } else {
+                assert!(matches!(next(&mut list, s), LineResult::None));
+            }
+        }
+        list.check_end();
+        list
+    }
+
+    #[test]
+    fn test_loose() {
+        assert!(!new_dash_all(["- list", "- item"]).loose);
+        assert!(new_dash_all(["- list", "", "- item"]).loose);
+        assert!(!new_dash_all(["- - nested", "- item"]).loose);
+        assert!(new_dash_all(["- - nested", "", "- item"]).loose);
+        assert!(!new_dash_all(["- - nested", "", "  - item", "- item"]).loose);
+        assert!(new_dash_all(["-", "  -", "    -", "", "- next"]).loose);
+        assert!(!new_dash_all(["-     code", "- item"]).loose);
+        assert!(new_dash_all(["-     code", "", "- item"]).loose);
+        assert!(new_dash_all(["-     code", "", "  content"]).loose);
+        assert!(
+            !new_dash_all(["- ***", "  - ***", "  - ***", "", "  - ***", "  - ***", "- ***"]).loose
+        );
+        assert!(
+            new_dash_all(["- ***", "  - ***", "  - ***", "", "  + ***", "  + ***", "- ***"]).loose
+        );
+    }
+
+    fn check<'a, F, M, T>(check: F, matches: M, line: &'a str)
+    where
+        F: FnOnce(SkipIndent<'a>) -> T,
+        M: FnOnce(T) -> bool,
+        T: 'a,
+    {
+        assert!(matches(check(SkipIndent::skip(line, 0).into_line())));
+    }
+
+    #[test]
+    fn test_checks() {
+        let plus_new = |c| matches!(c, NewItemResult::New(_));
+        let plus_text = |c| matches!(c, NewItemResult::Text(_));
+        let break_new = |c| matches!(c, NewItemBreakResult::New(_));
+        let break_break = |c| matches!(c, NewItemBreakResult::Break);
+        let break_text = |c| matches!(c, NewItemBreakResult::Text(_));
+        let setext_new = |c| matches!(c, CheckOrSetextResult::Check(CheckResult::New(_)));
+        let setext_break = |c| matches!(c, CheckOrSetextResult::Check(CheckResult::Done(_)));
+        let setext_text = |c| matches!(c, CheckOrSetextResult::Check(CheckResult::Text(_)));
+        let setext_setext = |c| matches!(c, CheckOrSetextResult::Setext(_));
+        let number_new = |c| matches!(c, NewOrderedItemResult::New(..));
+        let number_text = |c| matches!(c, NewOrderedItemResult::Text(_));
+        let number_para_new = |c| matches!(c, CheckResult::New(..));
+        let number_para_text = |c| matches!(c, CheckResult::Text(_));
+        check(Item::check_plus, plus_new, "+");
+        check(Item::check_plus, plus_text, "+a");
+        check(Item::check_plus, plus_new, "+ a");
+        check(Item::check_plus, plus_new, "+     a");
+        
+        check(Item::check_plus_paragraph, plus_text, "+");
+        check(Item::check_plus_paragraph, plus_text, "+a");
+        check(Item::check_plus_paragraph, plus_new, "+ a");
+        check(Item::check_plus_paragraph, plus_new, "+     a");
+        
+        check(Item::check_star_dash, break_new, "*");
+        check(Item::check_star_dash, break_text, "*a");
+        check(Item::check_star_dash, break_break, "***");
+        check(Item::check_star_dash, break_text, "*** a");
+        check(Item::check_star_dash, break_new, "* *");
+        check(Item::check_star_dash, break_break, "* * *");
+        check(Item::check_star_dash, break_new, "* * * a");
+        check(Item::check_star_dash, break_new, "*     a");
+        check(Item::check_star_dash, break_break, "*     **");
+        check(Item::check_star_dash, break_new, "*     ** a");
+
+        check(Item::check_star_paragraph, break_text, "*");
+        check(Item::check_star_paragraph, break_text, "*a");
+        check(Item::check_star_paragraph, break_break, "***");
+        check(Item::check_star_paragraph, break_text, "*** a");
+        check(Item::check_star_paragraph, break_new, "* *");
+        check(Item::check_star_paragraph, break_break, "* * *");
+        check(Item::check_star_paragraph, break_new, "* * * a");
+        check(Item::check_star_paragraph, break_new, "*     a");
+        check(Item::check_star_paragraph, break_break, "*     **");
+        check(Item::check_star_paragraph, break_new, "*     ** a");
+
+        check(Item::check_dash_paragraph, setext_setext, "-");
+        check(Item::check_dash_paragraph, setext_text, "-a");
+        check(Item::check_dash_paragraph, setext_setext, "---");
+        check(Item::check_dash_paragraph, setext_break, "-- -");
+        check(Item::check_dash_paragraph, setext_text, "--- a");
+        check(Item::check_dash_paragraph, setext_new, "- -");
+        check(Item::check_dash_paragraph, setext_setext, "--");
+        check(Item::check_dash_paragraph, setext_break, "- - -");
+        check(Item::check_dash_paragraph, setext_new, "- - - a");
+        check(Item::check_dash_paragraph, setext_new, "-     a");
+        check(Item::check_dash_paragraph, setext_break, "-     --");
+        check(Item::check_dash_paragraph, setext_new, "-     -- a");
+
+        check(Item::check_number, number_new, "1.");
+        check(Item::check_number, number_new, "1)");
+        check(Item::check_number, number_text, "1]");
+        check(Item::check_number, number_new, "1. a");
+        check(Item::check_number, number_new, "1.    a");
+        check(Item::check_number, number_text, "1234567890.");
+
+        check(Item::check_number_paragraph, number_para_text, "1.");
+        check(Item::check_number_paragraph, number_para_text, "1)");
+        check(Item::check_number_paragraph, number_para_text, "1] a");
+        check(Item::check_number_paragraph, number_para_new, "1. a");
+        check(Item::check_number_paragraph, number_para_new, "1.    a");
+        check(Item::check_number_paragraph, number_para_text, "11. a");
+    }
+}
