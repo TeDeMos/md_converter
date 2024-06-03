@@ -3,6 +3,7 @@ use std::fs;
 use std::iter::Peekable;
 use std::str::CharIndices;
 use std::string::String;
+use lazy_static::lazy_static;
 
 use serde::Deserialize;
 
@@ -14,11 +15,6 @@ enum HtmlEntityState {
     Hex,
     Dec,
     NoState,
-}
-
-#[derive(Deserialize)]
-struct Entity {
-    characters: String,
 }
 
 #[allow(dead_code)]
@@ -43,18 +39,6 @@ struct DelimiterStruct<'a> {
 
 #[allow(dead_code)]
 impl<'a> DelimiterStruct<'a> {
-    fn print_debug(&self) {
-        println!(
-            "DelimiterStruct {{ count: {}, is_strong: {}, delimiter_char: '{}', delim_slice: \
-             \"{}\", typeof_delimiter: {:?} }}",
-            self.count,
-            self.is_strong,
-            self.delimiter_char,
-            self.delim_slice,
-            self.typeof_delimiter
-        );
-    }
-
     fn change_slice(&mut self, new_slice: &'a str) { self.delim_slice = new_slice; }
 }
 
@@ -98,26 +82,14 @@ enum StringOrChar {
     HTMLChar(char),
 }
 
+lazy_static! {
+    static ref ENTITIES: HashMap<String, String> = {
+        let vec: Vec<(String, String)> = serde_json::from_str(&fs::read_to_string("entities.json").unwrap()).unwrap();
+        vec.into_iter().collect()
+    };
+}
+
 impl InlineParser {
-    pub fn create_hashmap() -> HashMap<String, Entity> {
-        // Read the JSON file
-        let file_content = fs::read_to_string("src/entities.json").expect("Unable to read file");
-
-        // Parse the JSON content
-        let entities: HashMap<String, Entity> = serde_json::from_str(&file_content).expect("IDK");
-
-        // Create the HashMap to store the entities and their corresponding characters
-        let mut html_entities: HashMap<&str, &str> = HashMap::new();
-
-        for (entity, details) in &entities {
-            html_entities.insert(entity, &details.characters);
-        }
-
-        // Example usage
-
-        entities
-    }
-
     fn get_backtick_string_length_vector(paragraph: &str) -> Vec<BacktickString> {
         let mut iter = paragraph.char_indices();
         let mut result = Vec::new();
@@ -197,7 +169,6 @@ impl InlineParser {
     pub fn html_entity_parsing(char_iter: &Peekable<CharIndices>) {}
 
     pub fn parse_html_entities(paragraph: &str) -> String {
-        let mut entities = Self::create_hashmap();
         let mut chars = paragraph.chars();
         let mut new_paragraph = String::new();
         let mut current = String::new();
@@ -209,9 +180,9 @@ impl InlineParser {
                     loop {
                         match temp_iter.next() {
                             Some(';') => {
-                                match entities.get(&current) {
+                                match ENTITIES.get(&current) {
                                     Some(c) => {
-                                        new_paragraph.push_str(&c.characters);
+                                        new_paragraph.push_str(c);
                                     },
                                     None => {
                                         new_paragraph.push('&');
