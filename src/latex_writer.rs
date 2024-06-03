@@ -5,6 +5,8 @@ use derive_more::Display;
 use crate::ast::{Alignment, Block, ColSpec, Inline, Pandoc, Row, TableBody, TableHead};
 use crate::traits::AstWriter;
 
+/// Writes a [`Pandoc`] ast representation to LaTeX. For now only [`Block`] and `[Inline`] elements
+/// available in GitHub Flavoured Markdown are supported
 #[derive(Default)]
 pub struct LatexWriter {
     result: String,
@@ -12,7 +14,9 @@ pub struct LatexWriter {
 }
 
 impl LatexWriter {
-    pub fn new() -> Self { Self { result: String::new(), enum_level: 0 } }
+    /// Creates a new [`LatexWriter`]
+    #[must_use]
+    pub const fn new() -> Self { Self { result: String::new(), enum_level: 0 } }
 }
 
 impl AstWriter for LatexWriter {
@@ -34,8 +38,10 @@ impl AstWriter for LatexWriter {
     }
 }
 
+/// Possible errors when writing to LaTeX
 #[derive(Debug, Display)]
 pub enum WriteError {
+    /// Writing a [`Block`] or [`Inline`] that was not yet implemented
     NotImplemented(&'static str),
 }
 

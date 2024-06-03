@@ -17,7 +17,7 @@ impl BlockQuote {
     /// Creates a block quote from a given non-blank line
     pub fn new(line: &SkipIndent) -> Self {
         let mut content = line.skip_indent_rest();
-        content.move_indent_capped(1);
+        content.inspect_line(|l| l.indent = l.indent.saturating_sub(1));
         let (current, finished) = TempBlock::new_empty(content);
         Self { current: Box::new(current), finished }
     }
@@ -28,7 +28,7 @@ impl BlockQuote {
             0..=3 =>
                 if line.first == '>' {
                     let mut content = line.skip_indent_rest();
-                    content.move_indent_capped(1);
+                    content.inspect_line(|l| l.indent = l.indent.saturating_sub(1));
                     self.current.next(content, &mut self.finished, links);
                     LineResult::None
                 } else {

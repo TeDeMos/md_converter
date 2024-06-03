@@ -6,12 +6,17 @@ use links::Links;
 use temp_block::TempBlock;
 
 use crate::ast::Pandoc;
+use crate::md_reader::iters::SkipIndent;
 use crate::traits::AstReader;
 
 pub mod inline_parser;
 mod iters;
 mod links;
 mod temp_block;
+
+pub fn test() {
+    dbg!(SkipIndent::skip("  \t line", 2));
+}
 
 /// Struct used for parsing GitHub Flavoured Markdown into the [`Pandoc`] type
 pub struct MdReader;

@@ -1,6 +1,7 @@
 use crate::ast::Pandoc;
 use crate::traits::AstReader;
 
+/// Deserialized a [`Pandoc`] ast representation from JSON for easy communication with Pandoc app
 pub struct NativeReader;
 
 impl AstReader for NativeReader {
