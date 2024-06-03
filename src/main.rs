@@ -4,8 +4,9 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
 
-use clap::builder::PossibleValuesParser;
 use clap::{Arg, ArgAction, Command};
+use clap::builder::PossibleValuesParser;
+
 use md_converter::ast::Pandoc;
 use md_converter::latex_writer::LatexWriter;
 use md_converter::md_reader::inline_parser::InlineParser;
@@ -16,7 +17,7 @@ use md_converter::traits::{AstReader, AstWriter};
 use md_converter::typst_writer::TypstWriter;
 
 fn main() {
-    let test = "* a *";
+    let test = "a * foo bar*";
     let res = InlineParser::parse_lines(test);
 
     // run()
@@ -33,7 +34,7 @@ fn run() {
     input_formats.add("native", || NativeReader);
     let mut output_formats = WriterMap::new();
     output_formats.add("latex", LatexWriter::new);
-    output_formats.add("typst", || TypstWriter);
+    output_formats.add("typst", || TypstWriter::new());
     output_formats.add("native", || NativeWriter);
     let matches = Command::new("convert")
         .arg(

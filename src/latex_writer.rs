@@ -263,6 +263,8 @@ impl LatexWriter {
                 return Err(WriteError::NotImplemented("Note is not yet implemented")),
             Inline::Span(..) =>
                 return Err(WriteError::NotImplemented("Span is not yet implemented")),
+            Inline::Temp(_) => todo!(),
+            Inline::None => todo!(),
         }
         Ok(())
     }
@@ -290,8 +292,9 @@ impl LatexWriter {
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use crate::ast::*;
+
+    use super::*;
 
     fn get_content(document: &str) -> &str {
         let start_pattern = "\\begin{document}\n";

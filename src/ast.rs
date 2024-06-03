@@ -154,6 +154,8 @@ pub enum Inline {
     Note(Vec<Block>),
     /// Generic [`Inline`] container with [`Attr`]
     Span(Attr, Vec<Inline>),
+    Temp(Text),
+    None,
 }
 
 /// Attributes: identifier, classes, key-value pairs
