@@ -42,8 +42,9 @@ mod tests {
 
     use lazy_static::lazy_static;
 
-    use super::*;
     use crate::ast::*;
+
+    use super::*;
 
     lazy_static! {
         static ref TESTS: Vec<String> =
@@ -67,11 +68,11 @@ mod tests {
             .unwrap();
             let result = MdReader.read(e).into_ok();
             if result.blocks == expected.blocks {
-                println!("\x1b[32mExample {number} : success");
+                println!("\n\x1b[32mExample {number} : success");
                 println!("Input:\n{e}");
                 println!("Output:\n{result:?}");
             } else {
-                println!("\x1b[31mExample {number} : failure");
+                println!("\n\x1b[31mExample {number} : failure");
                 println!("Input:\n{e}");
                 println!("Output:\n{result:?}");
                 println!("Expected: \n{expected:?}");
@@ -121,5 +122,8 @@ mod tests {
     fn lists() { test(281, 306) }
 
     #[test]
-    fn emph() { test(360, 490) }
+    fn emph() { test(360, 488) }
+
+    #[test]
+    fn emph_singular() { test(360, 488) }
 }

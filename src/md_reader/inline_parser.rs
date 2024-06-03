@@ -1,6 +1,10 @@
+use std::collections::HashMap;
+use std::fs;
 use std::iter::Peekable;
 use std::str::CharIndices;
 use std::string::String;
+
+use serde::Deserialize;
 
 use crate::ast::{attr_empty, Inline};
 
@@ -12,16 +16,22 @@ enum HtmlEntityState {
     NoState,
 }
 
+#[derive(Deserialize)]
+struct Entity {
+    characters: String,
+}
+
 #[allow(dead_code)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Potential {
     Opener,
     Closer,
     Both,
+    None,
 }
 
 #[allow(dead_code)]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct DelimiterStruct<'a> {
     count: usize,
     is_strong: bool,
@@ -89,6 +99,25 @@ enum StringOrChar {
 }
 
 impl InlineParser {
+    pub fn create_hashmap() -> HashMap<String, Entity> {
+        // Read the JSON file
+        let file_content = fs::read_to_string("src/entities.json").expect("Unable to read file");
+
+        // Parse the JSON content
+        let entities: HashMap<String, Entity> = serde_json::from_str(&file_content).expect("IDK");
+
+        // Create the HashMap to store the entities and their corresponding characters
+        let mut html_entities: HashMap<&str, &str> = HashMap::new();
+
+        for (entity, details) in &entities {
+            html_entities.insert(entity, &details.characters);
+        }
+
+        // Example usage
+
+        entities
+    }
+
     fn get_backtick_string_length_vector(paragraph: &str) -> Vec<BacktickString> {
         let mut iter = paragraph.char_indices();
         let mut result = Vec::new();
@@ -167,13 +196,60 @@ impl InlineParser {
 
     pub fn html_entity_parsing(char_iter: &Peekable<CharIndices>) {}
 
+    pub fn parse_html_entities(paragraph: &str) -> String {
+        let mut entities = Self::create_hashmap();
+        let mut chars = paragraph.chars();
+        let mut new_paragraph = String::new();
+        let mut current = String::new();
+        loop {
+            match chars.next() {
+                Some('&') => {
+                    let mut temp_iter = chars.clone();
+                    current = String::from("&");
+                    loop {
+                        match temp_iter.next() {
+                            Some(';') => {
+                                match entities.get(&current) {
+                                    Some(c) => {
+                                        new_paragraph.push_str(&c.characters);
+                                    },
+                                    None => {
+                                        new_paragraph.push('&');
+                                    },
+                                }
+                                chars = temp_iter.clone();
+                                break;
+                            },
+                            Some(x) => {
+                                current.push(x);
+                            },
+                            None => {
+                                new_paragraph.push_str(&*current);
+                                return new_paragraph;
+                            },
+                        }
+                    }
+                },
+                Some(c) => {
+                    new_paragraph.push(c);
+                },
+                None => {
+                    break;
+                },
+            }
+        }
+        new_paragraph
+    }
+
     pub fn parse_lines(paragraph: &str) -> Vec<Inline> {
-        let inlines_and_code = Self::parse_code_spans(paragraph);
+        let mut new_paragraph = &Self::parse_html_entities(paragraph);
+        let inlines_and_code = Self::parse_code_spans(new_paragraph);
         let mut last_opener_star: [Option<usize>; 3] = [None; 3];
         let mut last_opener_floor: [Option<usize>; 3] = [None; 3];
         let mut result: Vec<InlineElement> = Vec::new();
         let mut delimiter_stack: Vec<DelimiterStruct> = Vec::new();
         let mut iter = inlines_and_code.iter();
+        let mut is_beginning: bool = true;
 
         loop {
             match iter.next() {
@@ -181,11 +257,13 @@ impl InlineParser {
                     // Check if emphasis open then prepare the CODE inline
                     result.push(Self::parse_code_slice(x));
                     // println!("Code {x}");
+                    is_beginning = false;
                 },
                 Some(&SliceVariant::InlineSlice(x)) => {
                     delimiter_stack.append(&mut Self::parse_inline_slice(
-                        x, &mut result, &mut last_opener_star, &mut last_opener_floor,
+                        x, &mut result, &mut last_opener_star, &mut last_opener_floor, is_beginning,
                     ));
+                    is_beginning = false;
                     // println!("Inline {x}");
                 },
                 None => break,
@@ -195,7 +273,8 @@ impl InlineParser {
         let mut is_prev_str = false;
 
         let mut in_vec = parse_emph(
-            paragraph, &mut delimiter_stack, &last_opener_star, &last_opener_floor, 0, &mut result,
+            new_paragraph, &mut delimiter_stack, &last_opener_star, &last_opener_floor, 0,
+            &mut result,
         );
 
         for x in &result {
@@ -321,6 +400,7 @@ impl InlineParser {
     fn parse_inline_slice<'a>(
         slice: &'a str, result: &mut Vec<InlineElement<'a>>,
         last_opener_star: &mut [Option<usize>; 3], last_opener_floor: &mut [Option<usize>; 3],
+        mut is_beginning: bool,
     ) -> Vec<DelimiterStruct<'a>> {
         const ASCII_PUNCTUATION: [char; 27] = [
             '!', '"', '#', '%', '&', '\'', '(', ')', '*', ',', '.', '/', ':', ';', '?', '@', '[',
@@ -333,11 +413,11 @@ impl InlineParser {
             '\u{2029}', '\u{202F}', '\u{205F}', '\u{3000}',
         ];
         let mut delimiter_stack: Vec<DelimiterStruct> = Vec::new();
+        let mut two_spaces: bool = false;
         let mut is_space_stream: bool = false;
         let mut current: String = String::new();
         let mut html_current: String = String::new();
         let mut char_iter = slice.char_indices().peekable();
-        let mut is_beginning: bool = true;
         let mut link_open: bool = false;
         let mut parse_link = true;
         let mut current_begin: i32 = -1;
@@ -347,6 +427,8 @@ impl InlineParser {
         loop {
             match char_iter.next() {
                 Some((start, '[')) => {
+                    two_spaces = false;
+                    is_space_stream = false;
                     if (!current.is_empty()) {
                         result.push(InlineElement {
                             element: Inline::Str(current.clone()),
@@ -370,7 +452,9 @@ impl InlineParser {
 
                     link_open = true;
                 },
-                Some((start, ']')) =>
+                Some((start, ']')) => {
+                    two_spaces = false;
+                    is_space_stream = false;
                     if link_open {
                         let mut iter = delimiter_stack.iter().enumerate().rev();
                         let mut ending = false;
@@ -409,8 +493,10 @@ impl InlineParser {
                         }
                     } else {
                         current.push(']');
-                    },
-                Some((start, c @ ('*' | '_'))) => {
+                    }
+                },
+                Some((start, c @ ('*' | '_' | '~'))) => {
+                    two_spaces = false;
                     let mut is_left_run = false;
                     let mut is_right_run = false;
                     let mut length = 1;
@@ -454,7 +540,7 @@ impl InlineParser {
                         is_strong = false;
                     }
                     current_begin = end_slice as i32;
-
+                    if (end_slice - start > 2 && c == '~') {}
                     if !followed_by_whitespace
                         && (!followed_by_punctuation
                             || (followed_by_punctuation
@@ -537,20 +623,30 @@ impl InlineParser {
                             temp_vec: text_nodes,
                         });
                     }
+                    is_prev_punctuation = true;
                     is_space_stream = false;
                 },
-                Some((_, '\\')) => {
+                Some((i, '\\')) => {
                     is_space_stream = false;
+                    two_spaces = false;
                     if let Some((_, peek_char)) = char_iter.next() {
                         if !ASCII_PUNCTUATION.contains(&peek_char) {
                             current.push('\\');
                             is_prev_punctuation = true;
+                        }
+                        if peek_char == '\n' {
+                            result.push(InlineElement {
+                                element: Inline::LineBreak,
+                                slice: &slice[i..=i],
+                            });
+                            continue;
                         }
                         current.push(peek_char);
                     }
                 },
                 Some((index, '&')) => {
                     is_prev_punctuation = false;
+                    two_spaces = false;
                     let begin_index = index;
                     html_current.push('&');
                     is_space_stream = false;
@@ -601,8 +697,45 @@ impl InlineParser {
                         None => {},
                     }
                 },
+                Some((i, '\n')) => {
+                    is_space_stream = true;
+                    if !current.is_empty() {
+                        result.push(InlineElement {
+                            element: Inline::Str(current),
+                            slice: &slice[current_begin as usize..=i],
+                        });
+                        current = String::new();
+                        current_begin = i as i32;
+                    }
+                    if let Some(x) = result.pop() {
+                        if x.element != Inline::Space {
+                            result.push(x);
+                        }
+                        result.push(InlineElement {
+                            element: Inline::SoftBreak,
+                            slice: &slice[i..=i],
+                        });
+                    }
+                },
                 Some((index, c)) if UNICODE_WHITESPACE.contains(&c) => {
                     is_prev_punctuation = false;
+                    two_spaces = false;
+                    if c == ' ' {
+                        while let Some(&(end, y)) = char_iter.peek() {
+                            if y == ' ' {
+                                char_iter.next();
+                                two_spaces = true;
+                            } else if y == '\n' && two_spaces {
+                                result.push(InlineElement {
+                                    element: Inline::LineBreak,
+                                    slice: &slice[index..end],
+                                });
+                                break;
+                            } else {
+                                break;
+                            }
+                        }
+                    }
                     if !is_space_stream {
                         if !current.is_empty() {
                             result.push(InlineElement {
@@ -612,7 +745,7 @@ impl InlineParser {
                         }
                         result.push(InlineElement {
                             element: Inline::Space,
-                            slice: &slice[index..index + 1],
+                            slice: &slice[index..index + c.len_utf8()],
                         });
                         current = String::new();
                         is_space_stream = true;
@@ -624,8 +757,11 @@ impl InlineParser {
                 Some((index, c)) => {
                     if (ASCII_PUNCTUATION.contains(&c)) {
                         is_prev_punctuation = true;
+                    } else {
+                        is_prev_punctuation = false;
                     }
                     is_space_stream = false;
+                    two_spaces = false;
                     if current_begin == -1 {
                         current_begin = index as i32;
                     }
@@ -862,11 +998,12 @@ fn parse_emph<'a>(
     stack_bottom: usize, result_vec: &mut Vec<InlineElement<'a>>,
 ) -> Vec<InlineElement<'a>> {
     let mut emph_vector: Vec<InlineElement> = Vec::new();
+    let mut remove_vec_indices: Vec<usize> = Vec::new();
     // Nie moge przepisać na iterator bo iterator borrowuje wartość delimiter_stack
     for index in 0..delimiter_stack.len() {
         let mut delim = delimiter_stack[index].clone();
         match delim.typeof_delimiter {
-            Potential::Opener => {},
+            Potential::Opener | Potential::None => {},
             Potential::Both | Potential::Closer => {
                 let length = delim.count;
                 let mut min_index = 0;
@@ -904,8 +1041,8 @@ fn parse_emph<'a>(
                             && delimiter_stack[j].delimiter_char == delim.delimiter_char
                     {
                         let lower_bound = delimiter_stack[j].delim_slice.as_ptr() as usize
-                            - base_string.as_ptr() as usize
-                            + delimiter_stack[j].delim_slice.len();
+                            + delimiter_stack[j].delim_slice.len()
+                            - base_string.as_ptr() as usize;
                         if lower_bound < stack_bottom {
                             continue;
                         }
@@ -937,9 +1074,7 @@ fn parse_emph<'a>(
                                         if is_last_str {
                                             let mut temp = nested_inlines.pop().unwrap();
                                             if let Inline::Str(x) = temp {
-                                                nested_inlines.push(Inline::Str(
-                                                    c.to_string() + &*x.to_string(),
-                                                ));
+                                                nested_inlines.push(Inline::Str(x + c));
                                             }
                                         } else {
                                             nested_inlines.push(Inline::Str(c.to_string()));
@@ -951,20 +1086,19 @@ fn parse_emph<'a>(
                                     Inline::None =>
                                         result_vec[x] =
                                             InlineElement { element: Inline::None, slice: "" },
-                                    Inline::Str(c) =>
+                                    Inline::Str(c) => {
                                         if is_last_str {
                                             let mut temp = nested_inlines.pop().unwrap();
                                             if let Inline::Str(x) = temp {
-                                                nested_inlines.push(Inline::Str(
-                                                    c.to_string() + &*x.to_string(),
-                                                ));
+                                                nested_inlines.push(Inline::Str(x + c));
                                             }
                                         } else {
                                             is_last_str = true;
                                             nested_inlines.push(result_vec[x].element.clone());
-                                            result_vec[x] =
-                                                InlineElement { element: Inline::None, slice: "" };
-                                        },
+                                        }
+                                        result_vec[x] =
+                                            InlineElement { element: Inline::None, slice: "" };
+                                    },
                                     _ => {
                                         nested_inlines.push(result_vec[x].element.clone());
                                         result_vec[x] =
@@ -987,9 +1121,16 @@ fn parse_emph<'a>(
                                 .change_slice(&base_string[bottom_index..lower_bound]);
                             let top_index = upper_bound - 2 + delim.delim_slice.len();
                             delim.change_slice(&base_string[upper_bound..top_index]);
+                            for y in j + 1..index {
+                                delimiter_stack[y].change_slice("");
+                                delimiter_stack[y].typeof_delimiter = Potential::None;
+                                delimiter_stack[y].delimiter_char = '-';
+                                delimiter_stack[y].count = 0;
+                            }
                         }
                         if !delim.delim_slice.is_empty()
                             && !delimiter_stack[j].delim_slice.is_empty()
+                            && delim.delimiter_char == delimiter_stack[j].delimiter_char
                         {
                             let mut lower_res_index = delimiter_stack[j].temp_vec.pop().unwrap();
                             let mut upper_res_index = delim.temp_vec.remove(0);
@@ -1005,9 +1146,7 @@ fn parse_emph<'a>(
                                         if is_last_str {
                                             let mut temp = nested_inlines.pop().unwrap();
                                             if let Inline::Str(x) = temp {
-                                                nested_inlines.push(Inline::Str(
-                                                    c.to_string() + &*x.to_string(),
-                                                ));
+                                                nested_inlines.push(Inline::Str(x + c));
                                             }
                                         } else {
                                             nested_inlines.push(Inline::Str(c.to_string()));
@@ -1019,20 +1158,19 @@ fn parse_emph<'a>(
                                     Inline::None =>
                                         result_vec[x] =
                                             InlineElement { element: Inline::None, slice: "" },
-                                    Inline::Str(c) =>
+                                    Inline::Str(c) => {
                                         if is_last_str {
                                             let mut temp = nested_inlines.pop().unwrap();
                                             if let Inline::Str(x) = temp {
-                                                nested_inlines.push(Inline::Str(
-                                                    c.to_string() + &*x.to_string(),
-                                                ));
+                                                nested_inlines.push(Inline::Str(x + c));
                                             }
                                         } else {
                                             is_last_str = true;
                                             nested_inlines.push(result_vec[x].element.clone());
-                                            result_vec[x] =
-                                                InlineElement { element: Inline::None, slice: "" };
-                                        },
+                                        }
+                                        result_vec[x] =
+                                            InlineElement { element: Inline::None, slice: "" };
+                                    },
                                     _ => {
                                         nested_inlines.push(result_vec[x].element.clone());
                                         result_vec[x] =
@@ -1063,6 +1201,12 @@ fn parse_emph<'a>(
                                 .change_slice(&base_string[bottom_index..lower_bound]);
                             let top_index = upper_bound - 1 + delim.delim_slice.len();
                             delim.change_slice(&base_string[upper_bound..top_index]);
+                            for y in j + 1..index {
+                                delimiter_stack[y].change_slice("");
+                                delimiter_stack[y].typeof_delimiter = Potential::None;
+                                delimiter_stack[y].delimiter_char = '-';
+                                delimiter_stack[y].count = 0;
+                            }
                         }
 
                         if matches!(delimiter_stack[j].typeof_delimiter, Potential::Opener) {

@@ -1,6 +1,7 @@
+use derive_more::From;
+
 use atx_heading::AtxHeading;
 use block_quote::BlockQuote;
-use derive_more::From;
 use fenced_code_block::FencedCodeBlock;
 use indented_code_block::IndentedCodeBlock;
 use list::{CheckOrSetextResult, List};
@@ -15,6 +16,7 @@ use crate::md_reader::Links;
 mod atx_heading;
 mod block_quote;
 mod fenced_code_block;
+mod html_entity_parser;
 mod indented_code_block;
 mod list;
 mod paragraph;
