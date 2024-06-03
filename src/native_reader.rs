@@ -1,3 +1,5 @@
+//! Module containing the [`NativeReader`] type for reading [`Pandoc`] ast from JSON
+
 use crate::ast::Pandoc;
 use crate::traits::AstReader;
 

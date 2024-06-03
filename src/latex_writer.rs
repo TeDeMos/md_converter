@@ -1,8 +1,11 @@
+//! Module containing the [`LatexWriter`] type used for writing LaTeX
 use std::error::Error;
+
 
 use derive_more::Display;
 
 use crate::ast::{Alignment, Block, ColSpec, Inline, Pandoc, Row, TableBody, TableHead};
+use crate::md_reader::MdReader;
 use crate::traits::AstWriter;
 
 /// Writes a [`Pandoc`] ast representation to LaTeX. For now only [`Block`] and `[Inline`] elements

@@ -14,10 +14,6 @@ mod iters;
 mod links;
 mod temp_block;
 
-pub fn test() {
-    dbg!(SkipIndent::skip("  \t line", 2));
-}
-
 /// Struct used for parsing GitHub Flavoured Markdown into the [`Pandoc`] type
 pub struct MdReader;
 

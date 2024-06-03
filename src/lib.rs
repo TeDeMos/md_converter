@@ -17,3 +17,4 @@ pub mod native_reader;
 pub mod native_writer;
 pub mod traits;
 pub mod typst_writer;
+pub mod maps;

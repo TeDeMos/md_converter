@@ -1,8 +1,12 @@
+//! Module containing the [`TypstWriter`] type used for writing Typst
+
 use std::error::Error;
+
 
 use derive_more::Display;
 
 use crate::ast::{Block, ColSpec, Inline, Pandoc, Row, TableBody, TableHead};
+use crate::latex_writer::LatexWriter;
 use crate::traits::AstWriter;
 
 #[derive(Default)]

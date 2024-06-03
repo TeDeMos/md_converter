@@ -1,3 +1,5 @@
+//! Module containing traits from reading to and writing from [`Pandoc`] ast
+
 use std::error::Error;
 
 use crate::ast::Pandoc;

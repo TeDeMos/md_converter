@@ -1,3 +1,5 @@
+//! Module containing the [`NativeWriter`] type for writing [`Pandoc`] ast to JSON
+
 use crate::ast::Pandoc;
 use crate::traits::AstWriter;
 
