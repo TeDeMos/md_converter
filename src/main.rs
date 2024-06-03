@@ -1,21 +1,18 @@
-use std::collections::HashMap;
-use std::error::Error;
-use std::fs;
+use std::{fs, io};
+use std::io::Read;
 
 use clap::builder::PossibleValuesParser;
 use clap::{Arg, ArgAction, Command};
 
-use md_converter::ast::Pandoc;
 use md_converter::latex_writer::LatexWriter;
 use md_converter::maps::{ReaderMap, WriterMap};
 use md_converter::md_reader::MdReader;
 use md_converter::native_reader::NativeReader;
 use md_converter::native_writer::NativeWriter;
-use md_converter::traits::{AstReader, AstWriter};
 use md_converter::typst_writer::TypstWriter;
 
 fn main() {
-    // run()
+    run()
 }
 
 fn run() {
@@ -27,10 +24,14 @@ fn run() {
     output_formats.add("typst", TypstWriter::new);
     output_formats.add("native", || NativeWriter);
     let matches = Command::new("convert")
+        .version("1.0")
+        .author("Tymoteusz Malec, Jakub Szweda")
+        .about("Converts files from one format to another or reads from stdin if no filename is provided")
         .arg(
             Arg::new("from")
                 .long("from")
                 .short('f')
+                .help("Format of the input")
                 .required(true)
                 .action(ArgAction::Set)
                 .value_parser(PossibleValuesParser::new(input_formats.keys()))
@@ -41,6 +42,7 @@ fn run() {
             Arg::new("to")
                 .long("to")
                 .short('t')
+                .help("Target format to convert to")
                 .required(true)
                 .action(ArgAction::Set)
                 .value_parser(PossibleValuesParser::new(output_formats.keys()))
@@ -55,13 +57,25 @@ fn run() {
                 .value_name("OUTPUT_FILE")
                 .ignore_case(true),
         )
-        .arg(Arg::new("file").required(true).index(1).action(ArgAction::Set).value_name("FILE"))
+        .arg(Arg::new("file").index(1).action(ArgAction::Set).value_name("FILE"))
         .get_matches();
-    let content = match fs::read_to_string(matches.get_one::<String>("file").unwrap()) {
-        Ok(s) => s,
-        Err(e) => {
-            println!("Failed to read file:\n{}", e);
-            return;
+    let content = match matches.get_one::<String>("file") {
+        Some(f) => match fs::read_to_string(f) {
+            Ok(s) => s,
+            Err(e) => {
+                println!("Failed to read file:\n{}", e);
+                return;
+            }
+        }
+        None => {
+            let mut s = String::new();
+            match io::stdin().read_to_string(&mut s) {
+                Ok(_) => s,
+                Err(e) => {
+                    println!("Failed to read input from stdin:\n{}", e);
+                    return;
+                }
+            }
         },
     };
     let parsed = match input_formats.read(matches.get_one::<String>("from").unwrap(), &content) {
