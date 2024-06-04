@@ -124,6 +124,9 @@ mod tests {
     fn escaping() { test(309, 320) }
 
     #[test]
+    fn code_span() { test(338, 359) }
+
+    #[test]
     fn emph() { test(360, 488) }
 
     #[test]

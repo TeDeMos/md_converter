@@ -6,19 +6,18 @@ use clap::builder::PossibleValuesParser;
 
 use md_converter::latex_writer::LatexWriter;
 use md_converter::maps::{ReaderMap, WriterMap};
+use md_converter::md_reader::inline_parser::InlineParser;
 use md_converter::md_reader::MdReader;
 use md_converter::native_reader::NativeReader;
 use md_converter::native_writer::NativeWriter;
 use md_converter::typst_writer::TypstWriter;
 
 fn main() {
-    // let test =
-    // "\\!\\\"\\#\\$\\%\\&\\\'\\(\\)\\*\\+\\,\\-\\.\\/\\:\\;\\<\\=\\>\\?\\@\\[\\]\\^\\_\\\
-    //             `\\{\\|\\}\\~";
-    // for x in InlineParser::parse_lines(test) {
-    //     print!("{:?}", x);
-    // }
-    run()
+    let test = "` abc \\`";
+    for x in InlineParser::parse_lines(test) {
+        print!("{:?}", x);
+    }
+    // run()
 }
 
 fn run() {

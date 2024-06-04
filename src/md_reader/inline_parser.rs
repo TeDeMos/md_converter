@@ -65,9 +65,9 @@ lazy_static! {
 }
 
 impl InlineParser {
-    const ASCII_PUNCTUATION: [char; 27] = [
+    const ASCII_PUNCTUATION: [char; 31] = [
         '!', '"', '#', '%', '&', '\'', '(', ')', '*', ',', '.', '/', ':', ';', '?', '@', '[', '\\',
-        ']', '^', '_', '`', '{', '}', '|', '~', '-',
+        ']', '^', '_', '`', '{', '}', '|', '~', '-', '$', '<', '>', '=',
     ];
     const UNICODE_WHITESPACE: [char; 25] = [
         '\u{0009}', '\u{000A}', '\u{000B}', '\u{000C}', '\u{000D}', '\u{0020}', '\u{0085}',
@@ -79,13 +79,25 @@ impl InlineParser {
     fn get_backtick_string_length_vector(paragraph: &str) -> Vec<BacktickString> {
         let mut iter = paragraph.char_indices();
         let mut result = Vec::new();
+        let mut prev_escape = false;
+        let mut count_map: HashMap<usize, usize> = HashMap::new();
         loop {
             match iter.next() {
+                Some((_, '\\')) => {
+                    prev_escape = true;
+                },
                 Some((s, '`')) => loop {
                     match iter.next() {
                         Some((_, '`')) => continue,
                         Some((e, _)) => {
+                            if prev_escape && count_map.get(&(e - s)).is_some_and(|x| x % 2 == 1) {
+                                prev_escape = false;
+                                break;
+                            }
                             result.push(BacktickString { backtick_length: e - s, start_index: s });
+                            if let Some(x) = count_map.get(&(e - s)) {
+                                count_map.insert(e - s, x + 1);
+                            }
                             break;
                         },
                         None => {
@@ -97,7 +109,10 @@ impl InlineParser {
                         },
                     }
                 },
-                Some(_) => continue,
+                Some(_) => {
+                    prev_escape = false;
+                    continue;
+                },
                 None => return result,
             }
         }
@@ -264,7 +279,12 @@ impl InlineParser {
     }
 
     fn parse_code_slice(slice: &str) -> InlineElement {
-        let result = slice[1..slice.len() - 1].replace('\n', " ");
+        let mut x = 0;
+        while slice[x..slice.len() - x].starts_with('`') && slice[x..slice.len() - x].ends_with('`')
+        {
+            x += 1;
+        }
+        let result = slice[x..slice.len() - x].replace('\n', " ");
         if !result.chars().all(|c| matches!(c, ' '))
             && result.starts_with(' ')
             && result.ends_with(' ')
@@ -363,7 +383,7 @@ impl InlineParser {
         let mut char_iter = slice.char_indices().peekable();
         let mut link_open: bool = false;
         let mut parse_link = true;
-        let mut current_begin: Option<usize> = None;
+        let mut current_begin: Option<usize> = Some(0);
         let mut is_prev_punctuation: bool = false;
 
         while let Some((start, c)) = char_iter.next() {
@@ -382,7 +402,8 @@ impl InlineParser {
                     &mut is_prev_punctuation, &mut is_space_stream, is_beginning,
                 ),
                 '\\' => Self::handle_backslash(
-                    slice, result, &mut current, &mut char_iter, start, &mut is_prev_punctuation,
+                    slice, result, &mut current, &mut current_begin, &mut char_iter, start,
+                    &mut is_prev_punctuation,
                 ),
                 '&' => Self::handle_ampersand(&mut current, &mut char_iter, &mut html_current),
                 '\n' => Self::handle_newline(
@@ -593,7 +614,8 @@ impl InlineParser {
 
     fn handle_backslash<'a>(
         slice: &'a str, result: &mut Vec<InlineElement<'a>>, current: &mut String,
-        char_iter: &mut Peekable<CharIndices<'a>>, start: usize, is_prev_punctuation: &mut bool,
+        mut current_begin: &mut Option<usize>, char_iter: &mut Peekable<CharIndices<'a>>,
+        start: usize, is_prev_punctuation: &mut bool,
     ) {
         if let Some((_, peek_char)) = char_iter.next() {
             if !Self::ASCII_PUNCTUATION.contains(&peek_char) {
@@ -601,6 +623,15 @@ impl InlineParser {
                 *is_prev_punctuation = true;
             }
             if peek_char == '\n' {
+                current.pop();
+                if !current.is_empty() {
+                    result.push(InlineElement {
+                        element: Inline::Str((*current).to_string()),
+                        slice: &slice[current_begin.unwrap()..start],
+                    });
+                    *current_begin = Some(start);
+                    *current = String::new();
+                }
                 result.push(InlineElement {
                     element: Inline::LineBreak,
                     slice: &slice[start..=start],
