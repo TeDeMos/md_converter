@@ -9,5 +9,8 @@ pub struct NativeWriter;
 impl AstWriter for NativeWriter {
     type WriteError = serde_json::Error;
 
-    fn write(self, ast: Pandoc) -> Result<String, Self::WriteError> { serde_json::to_string(&ast) }
+    fn write(self, mut ast: Pandoc) -> Result<String, Self::WriteError> {
+        ast.pandoc_api_version = vec![1, 23, 1];
+        serde_json::to_string(&ast)
+    }
 }

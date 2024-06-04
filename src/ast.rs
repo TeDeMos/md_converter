@@ -19,6 +19,9 @@ type Map<T, K> = HashMap<T, K>;
 /// [`Deserialize`] traits. This type is compatible with Pandoc AST.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
 pub struct Pandoc {
+    /// Api version
+    #[serde(rename = "pandoc-api-version")]
+    pub pandoc_api_version: Vec<i32>,
     /// Metadata of a parsed document
     pub meta: Meta,
     /// Block elements of a parsed document

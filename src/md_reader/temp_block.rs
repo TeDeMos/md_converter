@@ -138,7 +138,7 @@ impl TempBlock {
     }
 
     /// Applies [`LineResult`] pushing finished blocks into the `finished` argument and finished
-    /// links into the [`links`] argument
+    /// links into the `links` argument
     fn apply_result(&mut self, result: LineResult, finished: &mut Vec<Self>, links: &mut Links) {
         match result {
             LineResult::None => {},

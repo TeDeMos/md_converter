@@ -318,6 +318,7 @@ mod test {
     #[test]
     fn special_chars() {
         let p = Pandoc {
+            pandoc_api_version: Vec::new(),
             meta: Meta::default(),
             blocks: vec![Block::Plain(vec![Inline::Str(String::from("&%$#_{}~^\\`"))])],
         };
@@ -331,6 +332,7 @@ mod test {
     #[test]
     fn str() {
         let p = Pandoc {
+            pandoc_api_version: Vec::new(),
             meta: Meta::default(),
             blocks: vec![Block::Plain(vec![Inline::Str(String::from("str"))])],
         };
