@@ -12,12 +12,6 @@ use md_converter::native_writer::NativeWriter;
 use md_converter::typst_writer::TypstWriter;
 
 fn main() {
-    // let test =
-    // "\\!\\\"\\#\\$\\%\\&\\\'\\(\\)\\*\\+\\,\\-\\.\\/\\:\\;\\<\\=\\>\\?\\@\\[\\]\\^\\_\\\
-    //             `\\{\\|\\}\\~";
-    // for x in InlineParser::parse_lines(test) {
-    //     print!("{:?}", x);
-    // }
     run()
 }
 
@@ -51,7 +45,7 @@ fn run() {
             Arg::new("to")
                 .long("to")
                 .short('t')
-                .help("Target format to convert to")
+                .help("Target format to convert into")
                 .required(true)
                 .action(ArgAction::Set)
                 .value_parser(PossibleValuesParser::new(output_formats.keys()))
