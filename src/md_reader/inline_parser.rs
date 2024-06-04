@@ -35,7 +35,7 @@ impl<'a> DelimiterStruct<'a> {
 }
 
 // Może zmienić an Inline
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct InlineElement<'a> {
     slice: &'a str,
     element: Inline,
@@ -552,7 +552,7 @@ impl InlineParser {
 
         if !followed_by_whitespace
             && (!followed_by_punctuation
-            || (*is_space_stream || is_beginning || *is_prev_punctuation))
+                || (*is_space_stream || is_beginning || *is_prev_punctuation))
             && end_slice != 0
         {
             is_left_run = true;
@@ -751,7 +751,6 @@ impl InlineParser {
 
     // Assume `parse_hex_entity` and `parse_dec_entity` are defined elsewhere.
 
-
     #[allow(dead_code)]
     #[allow(clippy::too_many_lines)]
     fn parse_emph<'a>(
@@ -772,12 +771,13 @@ impl InlineParser {
                     for j in (0..index).rev() {
                         if !matches!(delimiter_stack[j].typeof_delimiter, Potential::Closer)
                             && ((matches!(delimiter_stack[j].typeof_delimiter, Potential::Both)
-                            || matches!(delim.typeof_delimiter, Potential::Both))
-                            && (delimiter_stack[j].count + length) % 3 != 0
-                            || (length % 3 == 0 && delimiter_stack[j].delim_slice.len() % 3 == 0))
+                                || matches!(delim.typeof_delimiter, Potential::Both))
+                                && (delimiter_stack[j].count + length) % 3 != 0
+                                || (length % 3 == 0
+                                    && delimiter_stack[j].delim_slice.len() % 3 == 0))
                             || (matches!(delimiter_stack[j].typeof_delimiter, Potential::Opener)
-                            && matches!(delim.typeof_delimiter, Potential::Closer))
-                            && delimiter_stack[j].delimiter_char == delim.delimiter_char
+                                && matches!(delim.typeof_delimiter, Potential::Closer))
+                                && delimiter_stack[j].delimiter_char == delim.delimiter_char
                         {
                             let lower_bound = delimiter_stack[j].delim_slice.as_ptr() as usize
                                 + delimiter_stack[j].delim_slice.len()
@@ -954,7 +954,8 @@ impl InlineParser {
                                     .change_slice(&base_string[bottom_index..lower_bound]);
                                 let top_index = upper_bound - 1 + delim.delim_slice.len();
                                 delim.change_slice(&base_string[upper_bound..top_index]);
-                                for delimiter in delimiter_stack.iter_mut().take(index).skip(j + 1) {
+                                for delimiter in delimiter_stack.iter_mut().take(index).skip(j + 1)
+                                {
                                     delimiter.change_slice("");
                                     delimiter.typeof_delimiter = Potential::None;
                                     delimiter.delimiter_char = '-';

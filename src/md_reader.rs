@@ -130,5 +130,5 @@ mod tests {
     fn emph() { test(360, 488) }
 
     #[test]
-    fn emph_singular() { test(360, 488) }
+    fn emph_singular() { test(345, 346) }
 }

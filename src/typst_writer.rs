@@ -2,11 +2,9 @@
 
 use std::error::Error;
 
-
 use derive_more::Display;
 
 use crate::ast::{Block, ColSpec, Inline, Pandoc, Row, TableBody, TableHead};
-use crate::latex_writer::LatexWriter;
 use crate::traits::AstWriter;
 
 #[derive(Default)]
@@ -103,6 +101,8 @@ impl TypstWriter {
         }
         Ok(())
     }
+
+    fn start_new_line(&mut self) {}
 
     fn write_bullet_list(&mut self, items: Vec<Vec<Block>>) -> Result<(), WriteError> {
         self.push_str("\n- ");
