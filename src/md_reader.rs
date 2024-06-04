@@ -2,7 +2,7 @@
 
 use std::iter;
 
-use links::Links;
+pub use links::{Link, Links};
 use temp_block::TempBlock;
 
 use crate::ast::Pandoc;
@@ -27,8 +27,11 @@ impl AstReader for MdReader {
             current.next_str(line, &mut finished, &mut links);
         }
         current.finish_links(&mut links);
-        let result =
-            finished.into_iter().chain(iter::once(current)).filter_map(TempBlock::finish).collect();
+        let result = finished
+            .into_iter()
+            .chain(iter::once(current))
+            .filter_map(|t| t.finish(&links))
+            .collect();
         Ok(Pandoc { blocks: result, ..Default::default() })
     }
 }

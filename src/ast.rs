@@ -7,6 +7,7 @@ use derivative::Derivative;
 use serde::{Deserialize, Serialize};
 
 use crate::md_reader::inline_parser::InlineParser;
+use crate::md_reader::Links;
 
 type Bool = bool;
 type Int = i32;
@@ -96,15 +97,15 @@ impl Block {
     /// # Panics
     /// If `rows` is empty.
     #[must_use]
-    pub fn new_table(rows: Vec<Vec<String>>, alignments: Vec<Alignment>) -> Self {
+    pub fn new_table(rows: Vec<Vec<String>>, alignments: Vec<Alignment>, links: &Links) -> Self {
         let mut iter = rows.into_iter();
         let size = alignments.len();
         Self::Table(
             attr_empty(),
             Caption::default(),
             alignments.into_iter().map(|a| (a, ColWidth::ColWidthDefault)).collect(),
-            TableHead::new(iter.next().unwrap(), size),
-            vec![TableBody::new(iter, size)],
+            TableHead::new(iter.next().unwrap(), size, links),
+            vec![TableBody::new(iter, size, links)],
             TableFoot::default(),
         )
     }
@@ -202,8 +203,8 @@ impl TableHead {
     /// If the row contains too many elements, the excess will be ignored and if it contains too
     /// little elements, empty cells will be added.
     #[must_use]
-    pub fn new(row: Vec<String>, size: usize) -> Self {
-        Self(attr_empty(), vec![Row::new(row, size)])
+    pub fn new(row: Vec<String>, size: usize, links: &Links) -> Self {
+        Self(attr_empty(), vec![Row::new(row, size, links)])
     }
 }
 
@@ -218,9 +219,14 @@ impl TableBody {
     /// in the intermediate body. Each [`String`] is parsed as a [`Block::Plain`] element. If
     /// the row contains too many elements, the excess will be ignored and if it contains too
     /// little elements, empty cells will be added.
-    pub fn new<I>(rows: I, size: usize) -> Self
+    pub fn new<I>(rows: I, size: usize, links: &Links) -> Self
     where I: Iterator<Item = Vec<String>> {
-        Self(attr_empty(), RowHeadColumns(0), Vec::new(), rows.map(|r| Row::new(r, size)).collect())
+        Self(
+            attr_empty(),
+            RowHeadColumns(0),
+            Vec::new(),
+            rows.map(|r| Row::new(r, size, links)).collect(),
+        )
     }
 }
 
@@ -333,12 +339,12 @@ impl Row {
     /// of table columns. Each [`String`] is parsed as a [`Block::Plain`] element. If the row
     /// contains too many elements, the excess will be ignored and if it contains too
     /// little elements, empty cells will be added. The row will have empty [`Attr`]
-    pub fn new(row: Vec<String>, size: usize) -> Self {
+    pub fn new(row: Vec<String>, size: usize, links: &Links) -> Self {
         let rest = size - row.len();
         Self(
             attr_empty(),
             row.into_iter()
-                .map(|s| Cell::new(&s))
+                .map(|s| Cell::new(&s, links))
                 .chain(iter::repeat_with(Cell::default).take(rest))
                 .collect(),
         )
@@ -371,8 +377,8 @@ impl Cell {
     /// Creates a new [`Cell`]. The [`String`] will be parsed as a `[Block::Inline`]. The cell will
     /// have empty [`Attr`], `Alignment::Default` and [`RowSpan`] and [`ColSpan`] set to 1.
     #[must_use]
-    pub fn new(content: &str) -> Self {
-        let inlines = InlineParser::parse_lines(content);
+    pub fn new(content: &str, links: &Links) -> Self {
+        let inlines = InlineParser::parse_lines(content, &links);
         Self(
             attr_empty(),
             Alignment::Default,

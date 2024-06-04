@@ -1,5 +1,6 @@
 use crate::ast::{Alignment, Block};
 use crate::md_reader::iters::SkipIndent;
+use crate::md_reader::Links;
 use crate::md_reader::temp_block::{LineResult, NewResult, Paragraph, TempBlock};
 
 /// Struct representing an unfinished table
@@ -60,7 +61,9 @@ impl Table {
     }
 
     /// Finishes the table into a [`Block`]
-    pub fn finish(self) -> Block { Block::new_table(self.rows, self.alignments) }
+    pub fn finish(self, links: &Links) -> Block {
+        Block::new_table(self.rows, self.alignments, links)
+    }
 
     /// Checks how many columns a table header defined by this line has
     pub fn check_header(line: &str) -> usize {
@@ -161,7 +164,7 @@ mod tests {
         let result: Vec<_> = table.rows.last().unwrap().iter().map(String::as_str).collect();
         assert_eq!(result, expected);
     }
-    
+
     #[test]
     fn check_push() {
         push("|", 1, &[""]);

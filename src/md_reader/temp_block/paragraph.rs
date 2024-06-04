@@ -148,7 +148,7 @@ impl Paragraph {
     /// Finishes the paragraph into a [`Block`]. If the content is empty and the block would be a
     /// setext heading it becomes a paragraph with just the setext heading underline. An empty
     /// paragraph returns [`None`].
-    pub fn finish(self) -> Option<Block> {
+    pub fn finish(self, links: &Links) -> Option<Block> {
         if self.content.is_empty() {
             let char = match self.setext {
                 0 => return None,
@@ -158,7 +158,7 @@ impl Paragraph {
             };
             Some(Block::Para(vec![Inline::Str(char.repeat(self.setext_char_count))]))
         } else {
-            let parsed = InlineParser::parse_lines(&self.content);
+            let parsed = InlineParser::parse_lines(&self.content, links);
             Some(match self.setext {
                 0 => Block::Para(parsed),
                 _ => Block::new_header(self.setext, parsed),
@@ -244,7 +244,7 @@ mod tests {
     fn assert_links<'a, I>(i: I, paragraph: bool, links: usize)
     where I: IntoIterator<Item = &'a str> {
         let (p, l) = get_links(i);
-        assert_eq!(p.finish().is_some(), paragraph);
+        assert_eq!(p.finish(&l).is_some(), paragraph);
         assert_eq!(l.len(), links);
     }
 

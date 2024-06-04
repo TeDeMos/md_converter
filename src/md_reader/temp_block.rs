@@ -176,17 +176,17 @@ impl TempBlock {
     }
 
     /// Finishes block into a [`Block`]
-    pub fn finish(self) -> Option<Block> {
+    pub fn finish(self, links: &Links) -> Option<Block> {
         match self {
             Self::Empty => None,
-            Self::Paragraph(p) => p.finish(),
-            Self::AtxHeading(a) => Some(a.finish()),
+            Self::Paragraph(p) => p.finish(links),
+            Self::AtxHeading(a) => Some(a.finish(links)),
             Self::ThematicBreak(_) => Some(ThematicBreak::finish()),
             Self::IndentedCodeBlock(i) => Some(i.finish()),
             Self::FencedCodeBlock(c) => Some(c.finish()),
-            Self::Table(t) => Some(t.finish()),
-            Self::BlockQuote(b) => Some(b.finish()),
-            Self::List(l) => Some(l.finish()),
+            Self::Table(t) => Some(t.finish(links)),
+            Self::BlockQuote(b) => Some(b.finish(links)),
+            Self::List(l) => Some(l.finish(links)),
         }
     }
 

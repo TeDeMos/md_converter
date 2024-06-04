@@ -8,6 +8,7 @@ use std::string::String;
 use lazy_static::lazy_static;
 
 use crate::ast::{attr_empty, Inline};
+use crate::md_reader::links::{Link, Links};
 
 /// Structure containing methods for passing inlines with the main method for this being
 /// [`Self::parse_lines()`]
@@ -216,9 +217,10 @@ impl InlineParser {
     /// This function iterates over the given paragraph and runs methods when it finds special
     /// characters having some functionality in GFM
     #[must_use]
-    pub fn parse_lines(paragraph: &str) -> Vec<Inline> {
-        let new_paragraph = Self::parse_html_entities(paragraph);
-        let inlines_and_code = Self::parse_code_spans(&new_paragraph);
+    pub fn parse_lines(paragraph: &str, links: &Links) -> Vec<Inline> {
+        // let new_paragraph = Self::parse_html_entities(paragraph);
+        let new_paragraph = paragraph;
+        let inlines_and_code = Self::parse_code_spans(new_paragraph);
         let mut last_opener_star: [Option<usize>; 3] = [None; 3];
         let mut last_opener_floor: [Option<usize>; 3] = [None; 3];
         let mut result: Vec<InlineElement> = Vec::new();
@@ -236,7 +238,8 @@ impl InlineParser {
                 },
                 Some(&SliceVariant::InlineSlice(x)) => {
                     delimiter_stack.append(&mut Self::parse_inline_slice(
-                        x, &mut result, &mut last_opener_star, &mut last_opener_floor, is_beginning,
+                        x, &mut result, &mut last_opener_star, &mut last_opener_floor,
+                        is_beginning, links,
                     ));
                     is_beginning = false;
                     // println!("Inline {x}");
@@ -247,7 +250,7 @@ impl InlineParser {
         let mut true_result: Vec<Inline> = vec![];
         let mut is_prev_str = false;
 
-        Self::parse_emph(&new_paragraph, &mut delimiter_stack, 0, &mut result);
+        Self::parse_emph(new_paragraph, &mut delimiter_stack, 0, &mut result);
 
         for x in &result {
             match x.element.clone() {
@@ -255,10 +258,12 @@ impl InlineParser {
                     if is_prev_str {
                         let temp = true_result.pop().unwrap();
                         if let Inline::Str(y) = temp {
-                            true_result.push(Inline::Str(y.to_string() + &*c.to_string()));
+                            true_result.push(Inline::Str(Self::parse_html_entities(
+                                &(y.to_string() + &*c.to_string()),
+                            )));
                         }
                     } else {
-                        true_result.push(Inline::Str(c.to_string()));
+                        true_result.push(Inline::Str(Self::parse_html_entities(&(c.to_string()))));
                         is_prev_str = true;
                     },
                 Inline::None => {},
@@ -374,28 +379,27 @@ impl InlineParser {
     fn parse_inline_slice<'a>(
         slice: &'a str, result: &mut Vec<InlineElement<'a>>,
         last_opener_star: &mut [Option<usize>; 3], last_opener_floor: &mut [Option<usize>; 3],
-        mut is_beginning: bool,
+        mut is_beginning: bool, links: &Links,
     ) -> Vec<DelimiterStruct<'a>> {
         let mut delimiter_stack: Vec<DelimiterStruct> = Vec::new();
         let mut is_space_stream: bool = false;
         let mut current: String = String::new();
         let mut html_current: String = String::new();
         let mut char_iter = slice.char_indices().peekable();
-        let mut link_open: bool = false;
-        let mut parse_link = true;
+        // let mut link_open: bool = false;
+        // let mut parse_link = true;
         let mut current_begin: Option<usize> = Some(0);
         let mut is_prev_punctuation: bool = false;
 
         while let Some((start, c)) = char_iter.next() {
             match c {
-                '[' => Self::handle_open_bracket(
-                    slice, result, &mut current, &current_begin, &mut delimiter_stack, start,
-                    &mut link_open,
+                '[' => Self::handle_open_bracket_temp(
+                    slice, result, &mut current, &current_begin, start, &mut char_iter, links,
                 ),
-                ']' => Self::handle_close_bracket(
-                    slice, result, &mut current, &current_begin, &mut delimiter_stack, start,
-                    link_open, &mut parse_link, &mut char_iter,
-                ),
+                // ']' => Self::handle_close_bracket(
+                //     slice, result, &mut current, &current_begin, &mut delimiter_stack, start,
+                //     link_open, &mut parse_link, &mut char_iter,
+                // ),
                 '*' | '_' | '~' => Self::handle_special_char(
                     slice, result, &mut current, &mut current_begin, &mut char_iter, c, start,
                     &mut delimiter_stack, last_opener_star, last_opener_floor,
@@ -423,12 +427,74 @@ impl InlineParser {
 
         if !current.is_empty() {
             result.push(InlineElement {
-                element: Inline::Str(current),
+                element: Inline::Str(Self::parse_html_entities(&current)),
                 slice: &slice[current_begin.unwrap()..slice.len()],
             });
         }
 
         delimiter_stack
+    }
+
+    fn check_closed_bracket(
+        char_iter: &mut Peekable<CharIndices>, is_second: bool,
+    ) -> Option<usize> {
+        let mut prev_escape = false;
+        loop {
+            match char_iter.next() {
+                Some((end, ']')) => {
+                    if prev_escape {
+                        continue;
+                    }
+                    if is_second || char_iter.peek().is_some_and(|(_, y)| *y == '[') {
+                        return Some(end);
+                    }
+                },
+                Some((_, '\\')) => {
+                    prev_escape = true;
+                },
+                Some((..)) => {
+                    prev_escape = false;
+                },
+                None => {
+                    return None;
+                },
+            }
+        }
+    }
+
+    fn handle_open_bracket_temp<'a>(
+        slice: &'a str, result: &mut Vec<InlineElement<'a>>, current: &mut String,
+        current_begin: &Option<usize>, start: usize, char_iter: &mut Peekable<CharIndices<'a>>,
+        links: &Links,
+    ) {
+        if !current.is_empty() {
+            result.push(InlineElement {
+                element: Inline::Str(Self::parse_html_entities(&current.clone())),
+                slice: &slice[current_begin.unwrap()..start],
+            });
+        }
+        *current = String::new();
+        let mut temp_iter = char_iter.clone();
+        let Some(first_end) = Self::check_closed_bracket(&mut temp_iter, true) else {
+            return;
+        };
+        let link_ref = &slice[start + 1..first_end];
+        if let Some(Link { url, title }) = links.get(&Links::strip(link_ref)) {
+            result.push(InlineElement {
+                element: Inline::Link(
+                    attr_empty(),
+                    Vec::new(),
+                    (url.clone(), title.clone().unwrap_or_else(|| link_ref.to_owned())),
+                ),
+                slice: &slice[start..=first_end],
+            });
+        } else {
+            result.push(InlineElement {
+                element: Inline::Str(Self::parse_html_entities(&slice[start..=first_end])),
+                slice: &slice[start..=first_end],
+            });
+        }
+        *char_iter = temp_iter;
     }
 
     fn handle_open_bracket<'a>(
@@ -438,7 +504,7 @@ impl InlineParser {
     ) {
         if !current.is_empty() {
             result.push(InlineElement {
-                element: Inline::Str(current.clone()),
+                element: Inline::Str(Self::parse_html_entities(&current.clone())),
                 slice: &slice[current_begin.unwrap()..start],
             });
         }
@@ -458,49 +524,49 @@ impl InlineParser {
         *link_open = true;
     }
 
-    fn handle_close_bracket<'a>(
-        slice: &'a str, result: &mut Vec<InlineElement<'a>>, current: &mut String,
-        current_begin: &Option<usize>, delimiter_stack: &mut [DelimiterStruct<'a>], start: usize,
-        link_open: bool, parse_link: &mut bool, char_iter: &mut Peekable<CharIndices<'a>>,
-    ) {
-        if link_open {
-            // let iter = delimiter_stack.iter().enumerate().rev();
-            let mut ending = false;
-            let mut closed = false;
-            let node = InlineElement {
-                slice: &slice[start..=start],
-                element: Inline::Temp(String::from(']')),
-            };
-            if !current.is_empty() {
-                result.push(InlineElement {
-                    element: Inline::Str(current.clone()),
-                    slice: &slice[current_begin.unwrap()..start],
-                });
-            }
-            result.push(node);
-            *current = String::new();
-            if char_iter.peek().is_some_and(|(_x, y)| *y == '(') {
-                ending = true;
-            }
-            for i in (0..delimiter_stack.len()).rev() {
-                if delimiter_stack[i].delimiter_char == '['
-                    && !delimiter_stack[i].delim_slice.is_empty()
-                {
-                    if ending && closed {
-                        delimiter_stack[i].change_slice(&slice[start..start]);
-                    } else if closed {
-                        break;
-                    }
-                    let upper = Self::change_to_base(delimiter_stack[i].delim_slice, slice);
-                    delimiter_stack[i].change_slice(&slice[upper..upper]);
-                    *parse_link = true;
-                    closed = true;
-                }
-            }
-        } else {
-            current.push(']');
-        }
-    }
+    // fn handle_close_bracket<'a>(
+    //     slice: &'a str, result: &mut Vec<InlineElement<'a>>, current: &mut String,
+    //     current_begin: &Option<usize>, delimiter_stack: &mut [DelimiterStruct<'a>], start: usize,
+    //     link_open: bool, parse_link: &mut bool, char_iter: &mut Peekable<CharIndices<'a>>,
+    // ) {
+    //     if link_open {
+    //         // let iter = delimiter_stack.iter().enumerate().rev();
+    //         let mut ending = false;
+    //         let mut closed = false;
+    //         let node = InlineElement {
+    //             slice: &slice[start..=start],
+    //             element: Inline::Temp(String::from(']')),
+    //         };
+    //         if !current.is_empty() {
+    //             result.push(InlineElement {
+    //                 element: Inline::Str(Self::parse_html_entities(&current.clone())),
+    //                 slice: &slice[current_begin.unwrap()..start],
+    //             });
+    //         }
+    //         result.push(node);
+    //         *current = String::new();
+    //         if char_iter.peek().is_some_and(|(_x, y)| *y == '(') {
+    //             ending = true;
+    //         }
+    //         for i in (0..delimiter_stack.len()).rev() {
+    //             if delimiter_stack[i].delimiter_char == '['
+    //                 && !delimiter_stack[i].delim_slice.is_empty()
+    //             {
+    //                 if ending && closed {
+    //                     delimiter_stack[i].change_slice(&slice[start..start]);
+    //                 } else if closed {
+    //                     break;
+    //                 }
+    //                 let upper = Self::change_to_base(delimiter_stack[i].delim_slice, slice);
+    //                 delimiter_stack[i].change_slice(&slice[upper..upper]);
+    //                 *parse_link = true;
+    //                 closed = true;
+    //             }
+    //         }
+    //     } else {
+    //         current.push(']');
+    //     }
+    // }
 
     fn handle_special_char<'a>(
         slice: &'a str, result: &mut Vec<InlineElement<'a>>, current: &mut String,
@@ -511,7 +577,7 @@ impl InlineParser {
     ) {
         if !current.is_empty() {
             result.push(InlineElement {
-                element: Inline::Str(current.clone()),
+                element: Inline::Str(Self::parse_html_entities(&current.clone())),
                 slice: &slice[current_begin.unwrap()..start],
             });
             *current = String::new();
@@ -626,7 +692,7 @@ impl InlineParser {
                 current.pop();
                 if !current.is_empty() {
                     result.push(InlineElement {
-                        element: Inline::Str((*current).to_string()),
+                        element: Inline::Str(Self::parse_html_entities(&(*current).to_string())),
                         slice: &slice[current_begin.unwrap()..start],
                     });
                     *current_begin = Some(start);
@@ -675,6 +741,8 @@ impl InlineParser {
                 *char_iter = parse_result.1;
             }
             *html_current = String::new();
+        } else if let Some((..)) = char_iter.peek() {
+            current.push('&');
         }
     }
 
@@ -684,7 +752,7 @@ impl InlineParser {
     ) {
         if !current.is_empty() {
             result.push(InlineElement {
-                element: Inline::Str(current.clone()),
+                element: Inline::Str(Self::parse_html_entities(&current.clone())),
                 slice: &slice[current_begin.unwrap()..=start],
             });
             *current = String::new();
@@ -724,7 +792,7 @@ impl InlineParser {
         if !*is_space_stream {
             if !current.is_empty() {
                 result.push(InlineElement {
-                    element: Inline::Str(current.clone()),
+                    element: Inline::Str(Self::parse_html_entities(&current.clone())),
                     slice: &slice[current_begin.unwrap()..start],
                 });
             }
@@ -750,7 +818,6 @@ impl InlineParser {
     }
 
     // Assume `parse_hex_entity` and `parse_dec_entity` are defined elsewhere.
-
     #[allow(dead_code)]
     #[allow(clippy::too_many_lines)]
     fn parse_emph<'a>(
@@ -813,10 +880,14 @@ impl InlineParser {
                                             if is_last_str {
                                                 let temp = nested_inlines.pop().unwrap();
                                                 if let Inline::Str(x) = temp {
-                                                    nested_inlines.push(Inline::Str(x + c));
+                                                    nested_inlines.push(Inline::Str(
+                                                        Self::parse_html_entities(&(x + c)),
+                                                    ));
                                                 }
                                             } else {
-                                                nested_inlines.push(Inline::Str(c.to_string()));
+                                                nested_inlines.push(Inline::Str(
+                                                    Self::parse_html_entities(&c.to_string()),
+                                                ));
                                                 is_last_str = true;
                                             }
                                             result_vec[x] =
@@ -829,7 +900,9 @@ impl InlineParser {
                                             if is_last_str {
                                                 let temp = nested_inlines.pop().unwrap();
                                                 if let Inline::Str(x) = temp {
-                                                    nested_inlines.push(Inline::Str(x + c));
+                                                    nested_inlines.push(Inline::Str(
+                                                        Self::parse_html_entities(&(x + c)),
+                                                    ));
                                                 }
                                             } else {
                                                 is_last_str = true;
@@ -900,10 +973,14 @@ impl InlineParser {
                                                     nested_inlines.pop().unwrap()
                                                 {
                                                     last.push_str(c);
-                                                    nested_inlines.push(Inline::Str(last));
+                                                    nested_inlines.push(Inline::Str(
+                                                        Self::parse_html_entities(&last),
+                                                    ));
                                                 }
                                             } else {
-                                                nested_inlines.push(Inline::Str(c.to_string()));
+                                                nested_inlines.push(Inline::Str(
+                                                    Self::parse_html_entities(&c.to_string()),
+                                                ));
                                                 is_last_str = true;
                                             }
                                             elem.element = Inline::None;

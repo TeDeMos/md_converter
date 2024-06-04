@@ -1,11 +1,11 @@
 use std::iter;
 
-use crate::ast::{new_list_attributes, Block};
+use crate::ast::{Block, new_list_attributes};
 use crate::md_reader::iters::SkipIndent;
+use crate::md_reader::Links;
 use crate::md_reader::temp_block::{
     CheckResult, IndentedCodeBlock, LineResult, SkipIndentResult, TempBlock, ThematicBreak,
 };
-use crate::md_reader::Links;
 
 /// Struct representing an unfinished list
 #[derive(Debug)]
@@ -144,10 +144,14 @@ impl List {
     }
 
     /// Finishes the list into a [`Block`]
-    pub fn finish(mut self) -> Block {
+    pub fn finish(mut self, links: &Links) -> Block {
         self.check_end();
-        let done =
-            self.items.into_iter().chain(self.current).map(|i| i.finish(self.loose)).collect();
+        let done = self
+            .items
+            .into_iter()
+            .chain(self.current)
+            .map(|i| i.finish(self.loose, links))
+            .collect();
         match self.list_type {
             ListType::Unordered(_) => Block::BulletList(done),
             ListType::Ordered(Ordered { starting, closing }) =>
@@ -500,12 +504,12 @@ impl Item {
     }
 
     /// Finishes this item into a [`Vec`] of [`Block`] elements
-    fn finish(self, loose: bool) -> Vec<Block> {
+    fn finish(self, loose: bool, links: &Links) -> Vec<Block> {
         let temp = self
             .finished
             .into_iter()
             .chain(iter::once(*self.current))
-            .filter_map(TempBlock::finish);
+            .filter_map(|t| t.finish(links));
         if loose {
             temp.collect()
         } else {

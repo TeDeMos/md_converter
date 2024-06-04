@@ -39,12 +39,12 @@ impl BlockQuote {
     }
 
     /// Finishes the block quote into a [`Block`]
-    pub fn finish(self) -> Block {
+    pub fn finish(self, links: &Links) -> Block {
         Block::BlockQuote(
             self.finished
                 .into_iter()
                 .chain(iter::once(*self.current))
-                .filter_map(TempBlock::finish)
+                .filter_map(|t| t.finish(links))
                 .collect(),
         )
     }
@@ -53,15 +53,13 @@ impl BlockQuote {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
-    fn new(line: &str) -> BlockQuote {
-        BlockQuote::new(&SkipIndent::skip(line, 0).into_line())
-    }
+
+    fn new(line: &str) -> BlockQuote { BlockQuote::new(&SkipIndent::skip(line, 0).into_line()) }
 
     fn next(block_quote: &mut BlockQuote, line: &str) -> LineResult {
         block_quote.next(SkipIndent::skip(line, 0).into_line(), &mut Links::new())
     }
-    
+
     fn assert_consumed(block_quote: &mut BlockQuote, line: &str) {
         assert!(matches!(next(block_quote, line), LineResult::None));
     }
@@ -69,7 +67,7 @@ mod tests {
     fn assert_new(block_quote: &mut BlockQuote, line: &str) {
         assert!(matches!(next(block_quote, line), LineResult::DoneSelfAndNew(_)));
     }
-    
+
     #[test]
     fn gt_continues() {
         let mut para = new("> line");
@@ -77,7 +75,7 @@ mod tests {
         let mut other = new("> ***");
         assert_consumed(&mut other, "> next");
     }
-    
+
     #[test]
     fn continuation() {
         let mut para = new("> line");
@@ -85,7 +83,7 @@ mod tests {
         let mut other = new("> ***");
         assert_new(&mut other, "next");
     }
-    
+
     #[test]
     fn indented_continuation() {
         let mut para = new("> line");
@@ -93,7 +91,7 @@ mod tests {
         let mut other = new("> ***");
         assert_new(&mut other, "    next");
     }
-    
+
     #[test]
     fn nested_continuation() {
         let mut block = new(">>> nested");

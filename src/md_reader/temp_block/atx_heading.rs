@@ -1,6 +1,7 @@
 use crate::ast::Block;
 use crate::md_reader::inline_parser::InlineParser;
 use crate::md_reader::iters::SkipIndent;
+use crate::md_reader::Links;
 use crate::md_reader::temp_block::CheckResult;
 
 /// Struct representing a finished atx heading
@@ -38,15 +39,16 @@ impl AtxHeading {
     }
 
     /// Finishes a heading into a [`Block`] by parsing the content
-    pub fn finish(self) -> Block {
-        Block::new_header(self.level, InlineParser::parse_lines(&self.content))
+    pub fn finish(self, links: &Links) -> Block {
+        Block::new_header(self.level, InlineParser::parse_lines(&self.content, links))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::md_reader::temp_block::TempBlock;
+
+    use super::*;
 
     fn assert_done(line: &str) {
         assert!(matches!(

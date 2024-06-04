@@ -52,7 +52,7 @@ impl Links {
 
     /// Gets link from collection if present
     pub fn get(&self, stripped: &str) -> Option<&Link> { self.0.get(stripped) }
-    
+
     /// Returns amount of links in the collection
     pub fn len(&self) -> usize { self.0.len() }
 }
