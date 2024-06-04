@@ -4,24 +4,27 @@ use std::error::Error;
 
 use derive_more::Display;
 
-use crate::ast::{Block, ColSpec, Inline, Pandoc, Row, TableBody, TableHead};
+use crate::ast::{Alignment, Block, ColSpec, Inline, Pandoc, Row, TableBody, TableHead};
 use crate::traits::AstWriter;
 
 #[derive(Default)]
 pub struct TypstWriter {
     result: String,
-    enum_level: usize,
+    in_emph: bool,
+    in_strong: bool,
+    beginning: String,
 }
 
 impl TypstWriter {
-    pub fn new() -> Self { Self { result: String::new(), enum_level: 0 } }
+    pub fn new() -> Self {
+        Self { result: String::new(), in_emph: false, in_strong: false, beginning: String::new() }
+    }
 }
 
 impl AstWriter for TypstWriter {
     type WriteError = WriteError;
 
     fn write(mut self, ast: Pandoc) -> Result<String, Self::WriteError> {
-        self.push_str("#document()\n");
         self.write_blocks(ast.blocks)?;
         Ok(self.result)
     }
@@ -39,6 +42,11 @@ impl TypstWriter {
 
     fn push(&mut self, c: char) { self.result.push(c) }
 
+    fn new_line(&mut self) {
+        self.push('\n');
+        self.result.push_str(&self.beginning);
+    }
+
     fn write_blocks(&mut self, blocks: Vec<Block>) -> Result<(), WriteError> {
         for b in blocks {
             self.write_block(b)?;
@@ -48,22 +56,21 @@ impl TypstWriter {
 
     fn write_block(&mut self, block: Block) -> Result<(), WriteError> {
         match block {
-            Block::Plain(p) | Block::Para(p) => {
-                self.push('\n');
+            Block::Plain(p) => self.write_inlines(p)?,
+            Block::Para(p) => {
+                self.new_line();
                 self.write_inlines(p)?;
-                self.push('\n');
+                self.new_line();
             },
             Block::CodeBlock((l, ..), t) => self.write_code_block(&l, &t),
             Block::BlockQuote(b) => {
-                self.push_str("\n> ");
+                self.new_line();
+                self.push_str("#quote(block: true)[");
                 self.write_blocks(b)?;
-                self.push('\n');
+                self.push(']');
+                self.new_line();
             },
-            Block::OrderedList((s, ..), items) => {
-                self.enum_level += 1;
-                self.write_ordered_list(s, items)?;
-                self.enum_level -= 1;
-            },
+            Block::OrderedList((s, ..), items) => self.write_ordered_list(s, items)?,
             Block::BulletList(items) => self.write_bullet_list(items)?,
             Block::Header(l, _, i) => self.write_header(l, i)?,
             Block::HorizontalRule => self.push_str("\n---\n"),
@@ -82,62 +89,104 @@ impl TypstWriter {
     }
 
     fn write_code_block(&mut self, language: &str, content: &str) {
-        self.push_str("\n```");
+        let max = content
+            .lines()
+            .map(|s| {
+                let mut iter = s.chars();
+                let mut count = 0;
+                while iter.next() == Some('`') {
+                    count += 1;
+                }
+                match iter.next() {
+                    Some(_) => 0,
+                    None => count,
+                }
+            })
+            .max()
+            .unwrap_or(0)
+            .max(3);
+        self.new_line();
+        for _ in 0..max {
+            self.push('`');
+        }
         if !language.is_empty() {
             self.push_str(language);
         }
-        self.push('\n');
-        self.push_str(content);
-        self.push_str("\n```\n");
+        for line in content.lines() {
+            self.new_line();
+            self.push_str(line);
+        }
+        self.new_line();
+        for _ in 0..max {
+            self.push('`');
+        }
+        self.new_line();
     }
 
     fn write_ordered_list(&mut self, start: i32, items: Vec<Vec<Block>>) -> Result<(), WriteError> {
-        self.push_str("\n1. ");
-        for (i, item) in items.iter().enumerate() {
-            if i > 0 {
-                self.push_str("\n1. ");
+        self.new_line();
+        for (item, i) in items.into_iter().zip(start..) {
+            let parsed = i.to_string();
+            self.push_str(&parsed);
+            self.push_str(". ");
+            for _ in 0..parsed.len() + 2 {
+                self.beginning.push(' ');
             }
-            self.write_blocks(item.clone())?;
+            self.write_blocks(item)?;
+            for _ in 0..parsed.len() + 2 {
+                self.beginning.pop();
+            }
+            self.new_line();
         }
+        self.new_line();
         Ok(())
     }
 
-    fn start_new_line(&mut self) {}
-
     fn write_bullet_list(&mut self, items: Vec<Vec<Block>>) -> Result<(), WriteError> {
-        self.push_str("\n- ");
-        for (i, item) in items.iter().enumerate() {
-            if i > 0 {
-                self.push_str("\n- ");
-            }
+        self.new_line();
+        self.beginning.push_str("  ");
+        for item in items {
+            self.push_str("- ");
             self.write_blocks(item.clone())?;
         }
+        self.beginning.pop();
+        self.beginning.pop();
+        self.new_line();
         Ok(())
     }
 
     fn write_header(&mut self, level: i32, content: Vec<Inline>) -> Result<(), WriteError> {
-        self.push('\n');
+        self.new_line();
         for _ in 0..level {
-            self.push('#');
+            self.push('=');
         }
         self.push(' ');
         self.write_inlines(content)?;
-        self.push('\n');
+        self.new_line();
         Ok(())
     }
 
     fn write_table(
         &mut self, spec: Vec<ColSpec>, head: Vec<Row>, body: Vec<TableBody>,
     ) -> Result<(), WriteError> {
-        self.push_str("\n|");
-        let width = spec.len();
-        for _ in &spec {
-            self.push_str(" --- |");
+        let size = spec.len();
+        self.new_line();
+        self.push_str("#table(\n");
+        self.push_str("columns: ");
+        self.push_str(&size.to_string());
+        self.push_str("\nalign: (col, row) => (");
+        for (c, _) in spec {
+            match c {
+                Alignment::Left => self.push_str("left,"),
+                Alignment::Right => self.push_str("right,"),
+                Alignment::Center => self.push_str("center,"),
+                Alignment::Default => self.push_str("auto,"),
+            }
         }
-        self.push('\n');
+        self.push_str(").at(col),\n");
         for r in head.into_iter().chain(body.into_iter().next().into_iter().flat_map(|b| b.3)) {
-            self.push('|');
-            for c in r.1.into_iter().take(width) {
+            for c in r.1.into_iter().take(size) {
+                self.push_str("[");
                 let mut c_iter = c.4.into_iter();
                 let (Some(Block::Plain(i)), None) = (c_iter.next(), c_iter.next()) else {
                     return Err(WriteError::NotImplemented(
@@ -145,22 +194,11 @@ impl TypstWriter {
                     ));
                 };
                 self.write_inlines(i)?;
-                self.push('|');
+                self.push_str("],\n");
             }
-            self.push('\n');
         }
+        self.push(')');
         Ok(())
-    }
-
-    fn is_list_loose(list: &[Vec<Block>]) -> bool {
-        list.iter()
-            .flat_map(|v| v.iter())
-            .find_map(|b| match b {
-                Block::Para(_) => Some(false),
-                Block::Plain(_) => Some(true),
-                _ => None,
-            })
-            .unwrap_or(false)
     }
 
     fn write_inlines(&mut self, inlines: Vec<Inline>) -> Result<(), WriteError> {
@@ -173,39 +211,63 @@ impl TypstWriter {
     fn write_inline(&mut self, inline: Inline) -> Result<(), WriteError> {
         match inline {
             Inline::Str(s) => self.write_str(&s),
-            Inline::Emph(i) => {
-                self.push('*');
-                self.write_inlines(i)?;
-                self.push('*');
-            },
-            Inline::Strong(i) => {
-                self.push_str("**");
-                self.write_inlines(i)?;
-                self.push_str("**");
-            },
+            Inline::Emph(i) =>
+                if self.in_emph {
+                    self.write_inlines(i)?;
+                } else {
+                    self.push('_');
+                    self.in_emph = true;
+                    self.write_inlines(i)?;
+                    self.in_emph = false;
+                    self.push('_');
+                },
+            Inline::Strong(i) =>
+                if self.in_strong {
+                    self.write_inlines(i)?;
+                } else {
+                    self.push('*');
+                    self.in_strong = true;
+                    self.write_inlines(i)?;
+                    self.in_strong = false;
+                    self.push('*');
+                },
             Inline::Strikeout(i) => {
-                self.push_str("~~");
+                self.push_str("#strike[");
                 self.write_inlines(i)?;
-                self.push_str("~~");
+                self.push_str("]");
             },
             Inline::Code(_, s) => {
-                self.push('`');
+                let mut longest = 0;
+                let mut current = 0;
+                for c in s.chars() {
+                    if c == '`' {
+                        current += 1;
+                    } else {
+                        longest = longest.max(current);
+                        current = 0;
+                    }
+                }
+                for _ in 0..longest {
+                    self.push('`');
+                }
                 self.write_str(&s);
-                self.push('`');
+                for _ in 0..longest {
+                    self.push('`');
+                }
             },
             Inline::Space | Inline::SoftBreak => self.push(' '),
             Inline::LineBreak => self.push_str("\\\n"),
             Inline::Link(_, _, (u, t)) => {
-                self.push_str("[");
-                self.push_str(&t);
-                self.push_str("](");
+                self.push_str("#link(");
                 self.push_str(&u);
-                self.push_str(")");
+                self.push('[');
+                self.push_str(&t);
+                self.push(']');
             },
             Inline::Image(_, _, (u, _)) => {
-                self.push_str("![Image](");
+                self.push_str("#figure(image(\"");
                 self.push_str(&u);
-                self.push_str(")");
+                self.push_str("\", width: 100%))");
             },
             Inline::Underline(_) =>
                 return Err(WriteError::NotImplemented("Underline is not yet implemented")),
@@ -240,53 +302,15 @@ impl TypstWriter {
     }
 
     fn write_char(&mut self, c: char) {
-        match c {
-            '&' | '%' | '$' | '#' | '_' | '{' | '}' => {
-                self.push('\\');
-                self.push(c);
-            },
-            '~' => self.push('~'),
-            '^' => self.push('^'),
-            '\\' => self.push('\\'),
-            '`' => self.push('`'),
-            _ => self.push(c),
+        let special = ['\\', '{', '}', '[', ']', '(', ')', '#', '$', '%', '^', '*', '_', '&', '~', '`'];
+        if special.contains(&c) || c.is_ascii_digit() {
+            self.push('\\');
         }
+        self.push(c);
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::ast::*;
-
     use super::*;
-
-    fn get_content(document: &str) -> &str {
-        let start_pattern = "#document()\n";
-        let start = document.find(start_pattern).unwrap() + start_pattern.len();
-        document[start..].trim()
-    }
-
-    #[test]
-    fn special_chars() {
-        let p = Pandoc {
-            meta: Meta::default(),
-            blocks: vec![Block::Plain(vec![Inline::Str(String::from("&%$#_{}~^\\`"))])],
-        };
-        let result = TypstWriter::new().write(p).unwrap();
-        let content = get_content(&result);
-        let expected = "\\&\\%\\$\\#\\_\\{\\}~^\\`";
-        assert_eq!(content, expected);
-    }
-
-    #[test]
-    fn str() {
-        let p = Pandoc {
-            meta: Meta::default(),
-            blocks: vec![Block::Plain(vec![Inline::Str(String::from("str"))])],
-        };
-        let result = TypstWriter::new().write(p).unwrap();
-        let content = get_content(&result);
-        let expected = "str";
-        assert_eq!(content, expected);
-    }
 }

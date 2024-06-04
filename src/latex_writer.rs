@@ -63,7 +63,10 @@ impl LatexWriter {
 
     fn write_block(&mut self, block: Block) -> Result<(), WriteError> {
         match block {
-            Block::Plain(p) | Block::Para(p) => {
+            Block::Plain(p) => {
+                self.write_inlines(p)?;
+            }
+            Block::Para(p) => {
                 self.push('\n');
                 self.write_inlines(p)?;
                 self.push('\n');
