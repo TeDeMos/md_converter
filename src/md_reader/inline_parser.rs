@@ -1089,8 +1089,6 @@ impl InlineParser {
 
 #[cfg(test)]
 mod test {
-    use std::fmt::Debug;
-
     use super::*;
 
     #[test]

@@ -16,7 +16,6 @@ use crate::md_reader::Links;
 mod atx_heading;
 mod block_quote;
 mod fenced_code_block;
-mod html_entity_parser;
 mod indented_code_block;
 mod list;
 mod paragraph;
