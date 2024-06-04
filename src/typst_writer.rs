@@ -7,6 +7,8 @@ use derive_more::Display;
 use crate::ast::{Alignment, Block, ColSpec, Inline, Pandoc, Row, TableBody, TableHead};
 use crate::traits::AstWriter;
 
+/// Writes a [`Pandoc`] ast representation to Typst. For now only [`Block`] and `[Inline`] elements
+/// available in GitHub Flavoured Markdown are supported
 #[derive(Default)]
 pub struct TypstWriter {
     result: String,
@@ -16,6 +18,8 @@ pub struct TypstWriter {
 }
 
 impl TypstWriter {
+    /// Creates a new [`TypstWriter`]
+    #[must_use]
     pub fn new() -> Self {
         Self { result: String::new(), in_emph: false, in_strong: false, beginning: String::new() }
     }
@@ -30,8 +34,10 @@ impl AstWriter for TypstWriter {
     }
 }
 
+/// Possible errors when writing to Typst
 #[derive(Debug, Display)]
 pub enum WriteError {
+    /// Writing a [`Block`] or [`Inline`] that was not yet implemented
     NotImplemented(&'static str),
 }
 
@@ -302,15 +308,11 @@ impl TypstWriter {
     }
 
     fn write_char(&mut self, c: char) {
-        let special = ['\\', '{', '}', '[', ']', '(', ')', '#', '$', '%', '^', '*', '_', '&', '~', '`'];
+        let special =
+            ['\\', '{', '}', '[', ']', '(', ')', '#', '$', '%', '^', '*', '_', '&', '~', '`'];
         if special.contains(&c) || c.is_ascii_digit() {
             self.push('\\');
         }
         self.push(c);
     }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
 }
