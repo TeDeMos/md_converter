@@ -1,5 +1,6 @@
 //! Module containing the [`MdReader`] type used for parsing GitHub Flavoured Markdown
 
+use std::convert::Infallible;
 use std::iter;
 
 pub use links::{Link, Links};
@@ -17,7 +18,7 @@ mod temp_block;
 pub struct MdReader;
 
 impl AstReader for MdReader {
-    type ReadError = !;
+    type ReadError = Infallible;
 
     fn read(self, source: &str) -> Result<Pandoc, Self::ReadError> {
         let mut current = TempBlock::default();
@@ -68,7 +69,7 @@ mod tests {
                 std::str::from_utf8(&child.wait_with_output().unwrap().stdout).unwrap(),
             )
             .unwrap();
-            let result = MdReader.read(e).into_ok();
+            let result = MdReader.read(e).unwrap();
             if result.blocks == expected.blocks {
                 println!("\n\x1b[32mExample {number} : success");
                 println!("Input:\n{e}");

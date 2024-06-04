@@ -84,13 +84,15 @@ impl List {
 
     /// Parses a non-blank line of a document
     pub fn next(&mut self, mut line: SkipIndent, links: &mut Links) -> LineResult {
-        if let Some(current) = self.current.as_mut()
-            && line.indent >= current.indent + current.width
+        if let Some(current) = self.current.as_mut() 
         {
-            line.move_indent(current.indent + current.width);
-            current.next_line(line, links);
-            LineResult::None
-        } else if line.indent > 3 {
+            if line.indent >= current.indent + current.width {
+                line.move_indent(current.indent + current.width);
+                current.next_line(line, links);
+                return LineResult::None
+            }
+        }
+        if line.indent > 3 {
             match self.current.as_mut() {
                 Some(current) => current.current.next_indented_continuation(line),
                 None => LineResult::DoneSelfAndNew(IndentedCodeBlock::new(line).into()),

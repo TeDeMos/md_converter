@@ -5,9 +5,7 @@
 //! type as well as implementations for a gfm reader and LaTeX and
 //! Typst writers.
 
-#![feature(let_chains, unwrap_infallible, never_type, if_let_guard)]
 #![warn(clippy::pedantic, clippy::nursery)]
-//#![deny(dead_code)]
 
 pub mod ast;
 pub mod latex_writer;
