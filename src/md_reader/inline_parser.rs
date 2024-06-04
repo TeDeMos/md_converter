@@ -11,9 +11,11 @@ use crate::ast::{attr_empty, Inline};
 use crate::md_reader::links::{Link, Links};
 
 /// Structure containing methods for passing inlines with the main method for this being
-/// [`Self::parse_lines()`]
+/// [`InlineParser::parse_lines`]
 pub struct InlineParser;
 
+/// Enum containing possible states of a delimiter run which is used later in
+/// [`InlineParser::parse_emph`]
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Potential {
     Opener,
@@ -22,6 +24,8 @@ enum Potential {
     None,
 }
 
+/// Struct used for storing delimiter run information for later parsing in
+/// [`InlineParser::parse_emph`]
 #[derive(Clone, Debug)]
 struct DelimiterStruct<'a> {
     count: usize,
@@ -32,25 +36,35 @@ struct DelimiterStruct<'a> {
 }
 
 impl<'a> DelimiterStruct<'a> {
+    /// Method used for changing delimiter slice which is useful in determining whether the
+    /// delimiter run stored in [`DelimiterStruct`] is still active
     fn change_slice(&mut self, new_slice: &'a str) { self.delim_slice = new_slice; }
 }
 
-// Może zmienić an Inline
+/// Struct used for storing the type of [`Inline`] and slice contained in it
 #[derive(Clone, Debug)]
 struct InlineElement<'a> {
     slice: &'a str,
     element: Inline,
 }
 
+/// Struct used for keeping info on the length of the Backtick string which is a necessity when
+/// parsing with [`InlineParser::parse_backtick_string_length_vector`]. It is also returned in a
+/// vector in the [`InlineParser::get_backtick_string_length_vector`]
 struct BacktickString {
     backtick_length: usize,
     start_index: usize,
 }
 
+/// Enum used for keeping the information on whether the slice of the base string is a Code or an
+/// Inline slice on which the latter parsing methods [`InlineParser::parse_inline_slice`] and
+/// [`InlineParser::parse_code_slice`] depend
 enum SliceVariant<'a> {
     CodeSlice(&'a str),
     InlineSlice(&'a str),
 }
+
+// Enum keeps track of whether the html numerical entity parsing was a success or not
 #[allow(dead_code)]
 enum StringOrChar {
     NoHTMLString(String),
@@ -77,6 +91,8 @@ impl InlineParser {
         '\u{2029}', '\u{202F}', '\u{205F}', '\u{3000}',
     ];
 
+    /// Method receives the base paragraph and returns potential backtick strings which is necessary
+    /// for code span parsing in [`Self::parse_backtick_string_length_vector`]
     fn get_backtick_string_length_vector(paragraph: &str) -> Vec<BacktickString> {
         let mut iter = paragraph.char_indices();
         let mut result = Vec::new();
@@ -119,6 +135,7 @@ impl InlineParser {
         }
     }
 
+    /// Method for checking whether one slice is contained in another in memory
     #[allow(dead_code)]
     fn contains_slice(outer: &str, inner: &str) -> bool {
         let outer_start = outer.as_ptr() as usize;
@@ -129,6 +146,11 @@ impl InlineParser {
         inner_start >= outer_start && inner_end <= outer_end
     }
 
+    /// Method for the last stage of code slice parsing
+    /// After we receive the potential openers and closers of code spans we proceed to parse their
+    /// contents We return the other inline slices as well as code slices in a way that we are
+    /// able to determine the actual order of the slices and put them into
+    /// Vec<[`SliceVariant`]>
     fn parse_backtick_string_length_vector<'a>(
         paragraph: &'a str, backtick_vec: &[BacktickString],
     ) -> Vec<SliceVariant<'a>> {
@@ -162,6 +184,8 @@ impl InlineParser {
         }
     }
 
+    /// Method for staging the code slice parsing
+    /// Returns the final Inline and Code Span slices
     fn parse_code_spans(paragraph: &str) -> Vec<SliceVariant> {
         let backticks: Vec<BacktickString> = Self::get_backtick_string_length_vector(paragraph);
         Self::parse_backtick_string_length_vector(paragraph, &backticks)
@@ -283,6 +307,7 @@ impl InlineParser {
         true_result
     }
 
+    /// Parses given code slice into a code span according to the rules in the GFM website
     fn parse_code_slice(slice: &str) -> InlineElement {
         let mut x = 0;
         while slice[x..slice.len() - x].starts_with('`') && slice[x..slice.len() - x].ends_with('`')
@@ -303,6 +328,7 @@ impl InlineParser {
         }
     }
 
+    /// Method parsing html hexadecimal entities
     fn parse_hex_entity(
         mut copy_iter: Peekable<CharIndices>,
     ) -> (StringOrChar, Peekable<CharIndices>) {
@@ -332,6 +358,7 @@ impl InlineParser {
         (StringOrChar::NoHTMLString(current_bonus), begin_iter)
     }
 
+    /// Method for checking whether our html numerical entity value actually is a value we can print
     fn safe_entity_parse<'a>(
         entity_value: &Result<u32, ParseIntError>, mut copy_iter: Peekable<CharIndices<'a>>,
     ) -> (StringOrChar, Peekable<CharIndices<'a>>) {
@@ -344,6 +371,7 @@ impl InlineParser {
         }
     }
 
+    /// Method for parsing html decimal entity values
     fn parse_dec_entity(
         mut copy_iter: Peekable<CharIndices>,
     ) -> (StringOrChar, Peekable<CharIndices>) {
@@ -371,10 +399,11 @@ impl InlineParser {
         (StringOrChar::NoHTMLString(current_bonus), begin_iter)
     }
 
-    fn change_to_base(slice1: &str, slice2: &str) -> usize {
-        slice1.as_ptr() as usize - slice2.as_ptr() as usize
-    }
+    // fn change_to_base(slice1: &str, slice2: &str) -> usize {
+    //     slice1.as_ptr() as usize - slice2.as_ptr() as usize
+    // }
 
+    /// Method for parsing inline slices with accordance to GFM rules
     #[allow(clippy::too_many_lines)]
     fn parse_inline_slice<'a>(
         slice: &'a str, result: &mut Vec<InlineElement<'a>>,
@@ -435,6 +464,8 @@ impl InlineParser {
         delimiter_stack
     }
 
+    /// Method looks for a closed \[...\] bracket sequence and if the `is_second` parameter is true
+    /// checks whether it neighbors another potential closed bracket sequence
     fn check_closed_bracket(
         char_iter: &mut Peekable<CharIndices>, is_second: bool,
     ) -> Option<usize> {
@@ -462,6 +493,7 @@ impl InlineParser {
         }
     }
 
+    /// Method handling GFM links currently only working on reference links for example \[bar\]
     fn handle_open_bracket_temp<'a>(
         slice: &'a str, result: &mut Vec<InlineElement<'a>>, current: &mut String,
         current_begin: &Option<usize>, start: usize, char_iter: &mut Peekable<CharIndices<'a>>,
@@ -497,32 +529,32 @@ impl InlineParser {
         *char_iter = temp_iter;
     }
 
-    fn handle_open_bracket<'a>(
-        slice: &'a str, result: &mut Vec<InlineElement<'a>>, current: &mut String,
-        current_begin: &Option<usize>, delimiter_stack: &mut Vec<DelimiterStruct<'a>>,
-        start: usize, link_open: &mut bool,
-    ) {
-        if !current.is_empty() {
-            result.push(InlineElement {
-                element: Inline::Str(Self::parse_html_entities(&current.clone())),
-                slice: &slice[current_begin.unwrap()..start],
-            });
-        }
-        *current = String::new();
-        let node = InlineElement {
-            slice: &slice[start..=start],
-            element: Inline::Temp(String::from('[')),
-        };
-        delimiter_stack.push(DelimiterStruct {
-            count: 0,
-            delimiter_char: '[',
-            delim_slice: &slice[start..=start],
-            typeof_delimiter: Potential::Opener,
-            temp_vec: vec![result.len()],
-        });
-        result.push(node);
-        *link_open = true;
-    }
+    // fn handle_open_bracket<'a>(
+    //     slice: &'a str, result: &mut Vec<InlineElement<'a>>, current: &mut String,
+    //     current_begin: &Option<usize>, delimiter_stack: &mut Vec<DelimiterStruct<'a>>,
+    //     start: usize, link_open: &mut bool,
+    // ) {
+    //     if !current.is_empty() {
+    //         result.push(InlineElement {
+    //             element: Inline::Str(Self::parse_html_entities(&current.clone())),
+    //             slice: &slice[current_begin.unwrap()..start],
+    //         });
+    //     }
+    //     *current = String::new();
+    //     let node = InlineElement {
+    //         slice: &slice[start..=start],
+    //         element: Inline::Temp(String::from('[')),
+    //     };
+    //     delimiter_stack.push(DelimiterStruct {
+    //         count: 0,
+    //         delimiter_char: '[',
+    //         delim_slice: &slice[start..=start],
+    //         typeof_delimiter: Potential::Opener,
+    //         temp_vec: vec![result.len()],
+    //     });
+    //     result.push(node);
+    //     *link_open = true;
+    // }
 
     // fn handle_close_bracket<'a>(
     //     slice: &'a str, result: &mut Vec<InlineElement<'a>>, current: &mut String,
@@ -568,6 +600,8 @@ impl InlineParser {
     //     }
     // }
 
+    /// Method used for analysing delimiter run behavior and inserting them into proper
+    /// [`DelimiterStruct`] structs
     fn handle_special_char<'a>(
         slice: &'a str, result: &mut Vec<InlineElement<'a>>, current: &mut String,
         current_begin: &mut Option<usize>, char_iter: &mut Peekable<CharIndices<'a>>, c: char,
@@ -678,10 +712,11 @@ impl InlineParser {
         *is_space_stream = false;
     }
 
+    /// Method handling character escaping and linebreaks according to GFM rules
     fn handle_backslash<'a>(
         slice: &'a str, result: &mut Vec<InlineElement<'a>>, current: &mut String,
-        mut current_begin: &mut Option<usize>, char_iter: &mut Peekable<CharIndices<'a>>,
-        start: usize, is_prev_punctuation: &mut bool,
+        current_begin: &mut Option<usize>, char_iter: &mut Peekable<CharIndices<'a>>, start: usize,
+        is_prev_punctuation: &mut bool,
     ) {
         if let Some((_, peek_char)) = char_iter.next() {
             if !Self::ASCII_PUNCTUATION.contains(&peek_char) {
@@ -708,6 +743,7 @@ impl InlineParser {
         }
     }
 
+    /// Method handling html numerical entities according to GFM rules
     fn handle_ampersand(
         current: &mut String, char_iter: &mut Peekable<CharIndices>, html_current: &mut String,
     ) {
@@ -746,6 +782,7 @@ impl InlineParser {
         }
     }
 
+    /// Handling soft line break behavior according to GFM rules
     fn handle_newline<'a>(
         slice: &'a str, result: &mut Vec<InlineElement<'a>>, current: &mut String,
         current_begin: &mut Option<usize>, start: usize, is_space_stream: &mut bool,
@@ -767,6 +804,7 @@ impl InlineParser {
         *is_space_stream = true;
     }
 
+    /// Handling whitespace behavior according to GFM rules
     fn handle_whitespace<'a>(
         slice: &'a str, result: &mut Vec<InlineElement<'a>>, current: &mut String,
         current_begin: &Option<usize>, char_iter: &mut Peekable<CharIndices<'a>>,
@@ -805,6 +843,7 @@ impl InlineParser {
         }
     }
 
+    /// Handling regular character behavior according to GFM rules
     fn handle_regular_char(
         c: char, current: &mut String, current_begin: &mut Option<usize>, start: usize,
         is_prev_punctuation: &mut bool, is_space_stream: &mut bool,
@@ -817,7 +856,7 @@ impl InlineParser {
         current.push(c);
     }
 
-    // Assume `parse_hex_entity` and `parse_dec_entity` are defined elsewhere.
+    /// Method used for parsing possible emphasis strong strikethrough according to GFM rules
     #[allow(dead_code)]
     #[allow(clippy::too_many_lines)]
     fn parse_emph<'a>(
@@ -825,7 +864,6 @@ impl InlineParser {
         result_vec: &mut [InlineElement<'a>],
     ) -> Vec<InlineElement<'a>> {
         let mut emph_vector: Vec<InlineElement> = Vec::new();
-        // Nie moge przepisać na iterator bo iterator borrowuje wartość delimiter_stack
         for index in 0..delimiter_stack.len() {
             let mut delim = delimiter_stack[index].clone();
             match delim.typeof_delimiter {
@@ -1041,11 +1079,6 @@ impl InlineParser {
                             }
                         }
                     }
-                    // for x in result_vec.clone() {
-                    //     if x.element != Inline::None {
-                    //         print!("{:?}\n", x.element);
-                    //     }
-                    // }
                     delimiter_stack[index] = delim;
                 },
             }
@@ -1054,56 +1087,54 @@ impl InlineParser {
     }
 }
 
-// #[cfg(test)]
-// mod test {
-//     use std::fmt::Debug;
-//
-//     use crate::ast::attr_empty;
-//     use crate::inline_parser::*;
-//
-//     #[test]
-//     fn test_test() {
-//         // let result = MdReader::read("> ```\n> aaa\n\nbbb").into_ok();
-//         let test = vec!["hello        rust \\' \\ab".to_string()];
-//         let result = InlineParser::parse_lines(&test);
-//         assert_eq!(Inline::Str("hello".to_string()), result[0]);
-//         assert_eq!(Inline::Space, result[1]);
-//         assert_eq!(Inline::Str("rust".to_string()), result[2]);
-//         assert_eq!(Inline::Space, result[3]);
-//         assert_eq!(Inline::Str("'".to_string()), result[4]);
-//         assert_eq!(Inline::Space, result[5]);
-//     }
-//
-//     #[test]
-//     fn html_entity_dec_test() {
-//         let test = vec!["&#42;  asdfsasdasdasffs".to_string()];
-//         let result = InlineParser::parse_lines(&test);
-//         let Inline::Str(s) = &result[0] else { return };
-//         assert_eq!(s.to_string(), String::from("*"));
-//         assert_eq!(Inline::Space, result[1]);
-//         let Inline::Str(s) = &result[2] else { return };
-//         assert_eq!(s.to_string(), String::from("asdfsasdasdasffs"));
-//     }
-//
-//     #[test]
-//     fn html_entity_hex_test() {
-//         let test = vec!["&#x2A;  asdfsasdasdasffsasdf".to_string()];
-//         let result = InlineParser::parse_lines(&test);
-//         let Inline::Str(s) = &result[0] else { return };
-//         assert_eq!(s.to_string(), String::from("*"));
-//         assert_eq!(Inline::Space, result[1]);
-//         let Inline::Str(s) = &result[2] else { return };
-//         assert_eq!(s.to_string(), String::from("asdfsasdasdasffsasdf"));
-//     }
-//
-//     #[test]
-//     fn code_span_test() {
-//         let test = vec!["``` abc ```".to_string()];
-//         let result = InlineParser::parse_lines(&test);
-//         let tmp = attr_empty();
-//         let Inline::Code(tmp, s) = &result[0] else {
-//             return;
-//         };
-//         assert_eq!(s.to_string(), String::from("abc"));
-//     }
-// }
+#[cfg(test)]
+mod test {
+    use std::fmt::Debug;
+
+    use super::*;
+
+    #[test]
+    fn test_test() {
+        // let result = MdReader::read("> ```\n> aaa\n\nbbb").into_ok();
+        let test = String::from("hello        rust \\'");
+
+        let result = InlineParser::parse_lines(&test, &Links::new());
+        assert_eq!(Inline::Str("hello".to_string()), result[0]);
+        assert_eq!(Inline::Space, result[1]);
+        assert_eq!(Inline::Str("rust".to_string()), result[2]);
+        assert_eq!(Inline::Space, result[3]);
+        assert_eq!(Inline::Str("'".to_string()), result[4]);
+    }
+
+    #[test]
+    fn html_entity_dec_test() {
+        let test = String::from("&#42;  asdfsasdasdasffs");
+        let result = InlineParser::parse_lines(&test, &Links::new());
+        let Inline::Str(s) = &result[0] else { return };
+        assert_eq!(s.to_string(), String::from("*"));
+        assert_eq!(Inline::Space, result[1]);
+        let Inline::Str(s) = &result[2] else { return };
+        assert_eq!(s.to_string(), String::from("asdfsasdasdasffs"));
+    }
+
+    #[test]
+    fn html_entity_hex_test() {
+        let test = String::from("&#x2A;  asdfsasdasdasffsasdf");
+        let result = InlineParser::parse_lines(&test, &Links::new());
+        let Inline::Str(s) = &result[0] else { return };
+        assert_eq!(s.to_string(), String::from("*"));
+        assert_eq!(Inline::Space, result[1]);
+        let Inline::Str(s) = &result[2] else { return };
+        assert_eq!(s.to_string(), String::from("asdfsasdasdasffsasdf"));
+    }
+
+    #[test]
+    fn code_span_test() {
+        let test = String::from("``` abc ```");
+        let result = InlineParser::parse_lines(&test, &Links::new());
+        let Inline::Code(_, s) = &result[0] else {
+            panic!("Test failed :(");
+        };
+        assert_eq!(s.to_string(), String::from("abc"));
+    }
+}

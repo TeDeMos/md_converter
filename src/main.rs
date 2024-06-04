@@ -6,20 +6,19 @@ use clap::builder::PossibleValuesParser;
 
 use md_converter::latex_writer::LatexWriter;
 use md_converter::maps::{ReaderMap, WriterMap};
-use md_converter::md_reader::{Links, MdReader};
-use md_converter::md_reader::inline_parser::InlineParser;
+use md_converter::md_reader::MdReader;
 use md_converter::native_reader::NativeReader;
 use md_converter::native_writer::NativeWriter;
 use md_converter::typst_writer::TypstWriter;
 
 fn main() {
-    let test = "[bar]";
-    let mut links = Links::new();
-    links.add_new("bar", "asdf", Some("temp"));
-    for x in InlineParser::parse_lines(test, &links) {
-        print!("{:?}", x);
-    }
-    // run();
+    // let test = "hello        rust \\' \\ab";
+    // let mut links = Links::new();
+    // links.add_new("bar", "asdf", Some("temp"));
+    // for x in InlineParser::parse_lines(test, &links) {
+    //     print!("{:?}", x);
+    // }
+    run();
 }
 
 fn run() {

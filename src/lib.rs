@@ -8,13 +8,12 @@
 #![feature(let_chains, unwrap_infallible, never_type, if_let_guard)]
 #![warn(clippy::pedantic, clippy::nursery)]
 //#![deny(dead_code)]
-#![warn(missing_docs)]
 
 pub mod ast;
 pub mod latex_writer;
+pub mod maps;
 pub mod md_reader;
 pub mod native_reader;
 pub mod native_writer;
 pub mod traits;
 pub mod typst_writer;
-pub mod maps;
