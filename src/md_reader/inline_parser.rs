@@ -11,7 +11,7 @@ use crate::ast::{attr_empty, Inline};
 
 /// Structure containing methods for passing inlines with the main method for this being
 /// [`Self::parse_lines()`]
-pub struct InlineParser {}
+pub struct InlineParser;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Potential {
@@ -247,7 +247,7 @@ impl InlineParser {
         let mut true_result: Vec<Inline> = vec![];
         let mut is_prev_str = false;
 
-        parse_emph(&new_paragraph, &mut delimiter_stack, 0, &mut result);
+        Self::parse_emph(&new_paragraph, &mut delimiter_stack, 0, &mut result);
 
         for x in &result {
             match x.element.clone() {
@@ -552,7 +552,7 @@ impl InlineParser {
 
         if !followed_by_whitespace
             && (!followed_by_punctuation
-                || (*is_space_stream || is_beginning || *is_prev_punctuation))
+            || (*is_space_stream || is_beginning || *is_prev_punctuation))
             && end_slice != 0
         {
             is_left_run = true;
@@ -751,260 +751,229 @@ impl InlineParser {
 
     // Assume `parse_hex_entity` and `parse_dec_entity` are defined elsewhere.
 
-    /// Nie wiem jak zdokumentować tą funkcję nie używam jej
-    #[must_use]
-    pub fn parse_vector(vector: &[String]) -> Vec<Inline> { Self::parse_lines(&vector.join("")) }
 
-    /// Nie wiem jak zdokumentować tą funkcję nie używam jej
-    #[must_use]
-    pub fn parse_line(line: &str) -> Vec<Inline> { Self::parse_lines(line) }
-
-    fn _parse_one_line(line: &str, result: &mut Vec<Inline>) {
-        // todo
-        let mut space = false;
-        let mut current = String::new();
-        for c in line.trim().chars() {
-            if space {
-                if !matches!(c, ' ' | '\t') {
-                    result.push(Inline::Space);
-                    space = false;
-                    current.push(c);
-                }
-            } else if matches!(c, ' ' | '\t') {
-                result.push(Inline::Str(current));
-                current = String::new();
-                space = true;
-            } else {
-                current.push(c);
-            }
-        }
-        if !current.is_empty() {
-            result.push(Inline::Str(current));
-        }
-    }
-}
-
-#[allow(dead_code)]
-#[allow(clippy::too_many_lines)]
-fn parse_emph<'a>(
-    base_string: &'a str, delimiter_stack: &mut [DelimiterStruct<'a>], stack_bottom: usize,
-    result_vec: &mut [InlineElement<'a>],
-) -> Vec<InlineElement<'a>> {
-    let mut emph_vector: Vec<InlineElement> = Vec::new();
-    // Nie moge przepisać na iterator bo iterator borrowuje wartość delimiter_stack
-    for index in 0..delimiter_stack.len() {
-        let mut delim = delimiter_stack[index].clone();
-        match delim.typeof_delimiter {
-            Potential::Opener | Potential::None => {},
-            Potential::Both | Potential::Closer => {
-                let length = delim.count;
-                if index == 0 {
-                    continue;
-                }
-                for j in (0..index).rev() {
-                    if !matches!(delimiter_stack[j].typeof_delimiter, Potential::Closer)
-                        && ((matches!(delimiter_stack[j].typeof_delimiter, Potential::Both)
+    #[allow(dead_code)]
+    #[allow(clippy::too_many_lines)]
+    fn parse_emph<'a>(
+        base_string: &'a str, delimiter_stack: &mut [DelimiterStruct<'a>], stack_bottom: usize,
+        result_vec: &mut [InlineElement<'a>],
+    ) -> Vec<InlineElement<'a>> {
+        let mut emph_vector: Vec<InlineElement> = Vec::new();
+        // Nie moge przepisać na iterator bo iterator borrowuje wartość delimiter_stack
+        for index in 0..delimiter_stack.len() {
+            let mut delim = delimiter_stack[index].clone();
+            match delim.typeof_delimiter {
+                Potential::Opener | Potential::None => {},
+                Potential::Both | Potential::Closer => {
+                    let length = delim.count;
+                    if index == 0 {
+                        continue;
+                    }
+                    for j in (0..index).rev() {
+                        if !matches!(delimiter_stack[j].typeof_delimiter, Potential::Closer)
+                            && ((matches!(delimiter_stack[j].typeof_delimiter, Potential::Both)
                             || matches!(delim.typeof_delimiter, Potential::Both))
                             && (delimiter_stack[j].count + length) % 3 != 0
                             || (length % 3 == 0 && delimiter_stack[j].delim_slice.len() % 3 == 0))
-                        || (matches!(delimiter_stack[j].typeof_delimiter, Potential::Opener)
+                            || (matches!(delimiter_stack[j].typeof_delimiter, Potential::Opener)
                             && matches!(delim.typeof_delimiter, Potential::Closer))
                             && delimiter_stack[j].delimiter_char == delim.delimiter_char
-                    {
-                        let lower_bound = delimiter_stack[j].delim_slice.as_ptr() as usize
-                            + delimiter_stack[j].delim_slice.len()
-                            - base_string.as_ptr() as usize;
-                        if lower_bound < stack_bottom {
-                            continue;
-                        }
-                        while delim.delim_slice.len() >= 2
-                            && delimiter_stack[j].delim_slice.len() >= 2
                         {
-                            let upper_bound = delim.delim_slice.as_ptr() as usize
-                                - base_string.as_ptr() as usize
-                                + 2;
-                            if lower_bound < stack_bottom || upper_bound < stack_bottom {
-                                break;
-                            }
-                            result_vec[delimiter_stack[j].temp_vec.pop().unwrap()] =
-                                InlineElement { element: Inline::None, slice: "" };
-
-                            let lower_res_index = delimiter_stack[j].temp_vec.pop().unwrap();
-                            result_vec[lower_res_index] =
-                                InlineElement { element: Inline::None, slice: "" };
-                            result_vec[delim.temp_vec.remove(0)] =
-                                InlineElement { element: Inline::None, slice: "" };
-                            let upper_res_index = delim.temp_vec.remove(0);
-                            result_vec[upper_res_index] =
-                                InlineElement { element: Inline::None, slice: "" };
-                            let mut nested_inlines = Vec::new();
-                            let mut is_last_str = false;
-                            for x in lower_res_index..=upper_res_index {
-                                match &result_vec[x].element {
-                                    Inline::Temp(c) => {
-                                        if is_last_str {
-                                            let temp = nested_inlines.pop().unwrap();
-                                            if let Inline::Str(x) = temp {
-                                                nested_inlines.push(Inline::Str(x + c));
-                                            }
-                                        } else {
-                                            nested_inlines.push(Inline::Str(c.to_string()));
-                                            is_last_str = true;
-                                        }
-                                        result_vec[x] =
-                                            InlineElement { element: Inline::None, slice: "" };
-                                    },
-                                    Inline::None =>
-                                        result_vec[x] =
-                                            InlineElement { element: Inline::None, slice: "" },
-                                    Inline::Str(c) => {
-                                        if is_last_str {
-                                            let temp = nested_inlines.pop().unwrap();
-                                            if let Inline::Str(x) = temp {
-                                                nested_inlines.push(Inline::Str(x + c));
-                                            }
-                                        } else {
-                                            is_last_str = true;
-                                            nested_inlines.push(result_vec[x].element.clone());
-                                        }
-                                        result_vec[x] =
-                                            InlineElement { element: Inline::None, slice: "" };
-                                    },
-                                    _ => {
-                                        nested_inlines.push(result_vec[x].element.clone());
-                                        result_vec[x] =
-                                            InlineElement { element: Inline::None, slice: "" };
-                                        is_last_str = false;
-                                    },
-                                }
-                            }
-
-                            if delim.delimiter_char == '~' {
-                                result_vec[lower_res_index] = InlineElement {
-                                    element: Inline::Strikeout(nested_inlines.clone()),
-                                    slice: &base_string[lower_bound..upper_bound],
-                                };
-                                emph_vector.push(InlineElement {
-                                    element: Inline::Strikeout(nested_inlines),
-                                    slice: &base_string[lower_bound..upper_bound],
-                                });
-                            } else {
-                                result_vec[lower_res_index] = InlineElement {
-                                    element: Inline::Strong(nested_inlines.clone()),
-                                    slice: &base_string[lower_bound..upper_bound],
-                                };
-                                emph_vector.push(InlineElement {
-                                    element: Inline::Strong(nested_inlines),
-                                    slice: &base_string[lower_bound..upper_bound],
-                                });
-                            }
-                            let bottom_index =
-                                lower_bound + 2 - delimiter_stack[j].delim_slice.len();
-                            delimiter_stack[j]
-                                .change_slice(&base_string[bottom_index..lower_bound]);
-                            let top_index = upper_bound - 2 + delim.delim_slice.len();
-                            delim.change_slice(&base_string[upper_bound..top_index]);
-                            for delimiter in &mut delimiter_stack[j + 1..index] {
-                                delimiter.change_slice("");
-                                delimiter.typeof_delimiter = Potential::None;
-                                delimiter.delimiter_char = '-';
-                                delimiter.count = 0;
-                            }
-                        }
-                        if !delim.delim_slice.is_empty()
-                            && !delimiter_stack[j].delim_slice.is_empty()
-                            && delim.delimiter_char == delimiter_stack[j].delimiter_char
-                        {
-                            let lower_res_index = delimiter_stack[j].temp_vec.pop().unwrap();
-                            let upper_res_index = delim.temp_vec.remove(0);
-                            result_vec[upper_res_index] =
-                                InlineElement { element: Inline::None, slice: "" };
-                            result_vec[lower_res_index] =
-                                InlineElement { element: Inline::None, slice: "" };
-                            let mut nested_inlines = Vec::new();
-                            let mut is_last_str: bool = false;
-                            for x in lower_res_index..=upper_res_index {
-                                let elem = &mut result_vec[x];
-                                match &elem.element {
-                                    Inline::Temp(c) | Inline::Str(c) => {
-                                        if is_last_str {
-                                            if let Inline::Str(mut last) =
-                                                nested_inlines.pop().unwrap()
-                                            {
-                                                last.push_str(c);
-                                                nested_inlines.push(Inline::Str(last));
-                                            }
-                                        } else {
-                                            nested_inlines.push(Inline::Str(c.to_string()));
-                                            is_last_str = true;
-                                        }
-                                        elem.element = Inline::None;
-                                        elem.slice = "";
-                                    },
-                                    Inline::None => {
-                                        elem.element = Inline::None;
-                                        elem.slice = "";
-                                    },
-                                    _ => {
-                                        nested_inlines.push(elem.element.clone());
-                                        elem.element = Inline::None;
-                                        elem.slice = "";
-                                        is_last_str = false;
-                                    },
-                                }
-                            }
-
                             let lower_bound = delimiter_stack[j].delim_slice.as_ptr() as usize
-                                - base_string.as_ptr() as usize
                                 + delimiter_stack[j].delim_slice.len()
-                                - 1;
-                            let upper_bound = delim.delim_slice.as_ptr() as usize
-                                - base_string.as_ptr() as usize
-                                + 1;
-                            if delim.delimiter_char == '~' {
-                                result_vec[lower_res_index] = InlineElement {
-                                    element: Inline::Strikeout(nested_inlines.clone()),
-                                    slice: &base_string[lower_bound..upper_bound],
-                                };
-                                emph_vector.push(InlineElement {
-                                    element: Inline::Strikeout(nested_inlines),
-                                    slice: &base_string[lower_bound..upper_bound],
-                                });
-                            } else {
-                                result_vec[lower_res_index] = InlineElement {
-                                    element: Inline::Emph(nested_inlines.clone()),
-                                    slice: &base_string[lower_bound..upper_bound],
-                                };
-                                emph_vector.push(InlineElement {
-                                    element: Inline::Emph(nested_inlines),
-                                    slice: &base_string[lower_bound..upper_bound],
-                                });
+                                - base_string.as_ptr() as usize;
+                            if lower_bound < stack_bottom {
+                                continue;
                             }
-                            let bottom_index =
-                                lower_bound + 1 - delimiter_stack[j].delim_slice.len();
-                            delimiter_stack[j]
-                                .change_slice(&base_string[bottom_index..lower_bound]);
-                            let top_index = upper_bound - 1 + delim.delim_slice.len();
-                            delim.change_slice(&base_string[upper_bound..top_index]);
-                            for delimiter in delimiter_stack.iter_mut().take(index).skip(j + 1) {
-                                delimiter.change_slice("");
-                                delimiter.typeof_delimiter = Potential::None;
-                                delimiter.delimiter_char = '-';
-                                delimiter.count = 0;
+                            while delim.delim_slice.len() >= 2
+                                && delimiter_stack[j].delim_slice.len() >= 2
+                            {
+                                let upper_bound = delim.delim_slice.as_ptr() as usize
+                                    - base_string.as_ptr() as usize
+                                    + 2;
+                                if lower_bound < stack_bottom || upper_bound < stack_bottom {
+                                    break;
+                                }
+                                result_vec[delimiter_stack[j].temp_vec.pop().unwrap()] =
+                                    InlineElement { element: Inline::None, slice: "" };
+
+                                let lower_res_index = delimiter_stack[j].temp_vec.pop().unwrap();
+                                result_vec[lower_res_index] =
+                                    InlineElement { element: Inline::None, slice: "" };
+                                result_vec[delim.temp_vec.remove(0)] =
+                                    InlineElement { element: Inline::None, slice: "" };
+                                let upper_res_index = delim.temp_vec.remove(0);
+                                result_vec[upper_res_index] =
+                                    InlineElement { element: Inline::None, slice: "" };
+                                let mut nested_inlines = Vec::new();
+                                let mut is_last_str = false;
+                                for x in lower_res_index..=upper_res_index {
+                                    match &result_vec[x].element {
+                                        Inline::Temp(c) => {
+                                            if is_last_str {
+                                                let temp = nested_inlines.pop().unwrap();
+                                                if let Inline::Str(x) = temp {
+                                                    nested_inlines.push(Inline::Str(x + c));
+                                                }
+                                            } else {
+                                                nested_inlines.push(Inline::Str(c.to_string()));
+                                                is_last_str = true;
+                                            }
+                                            result_vec[x] =
+                                                InlineElement { element: Inline::None, slice: "" };
+                                        },
+                                        Inline::None =>
+                                            result_vec[x] =
+                                                InlineElement { element: Inline::None, slice: "" },
+                                        Inline::Str(c) => {
+                                            if is_last_str {
+                                                let temp = nested_inlines.pop().unwrap();
+                                                if let Inline::Str(x) = temp {
+                                                    nested_inlines.push(Inline::Str(x + c));
+                                                }
+                                            } else {
+                                                is_last_str = true;
+                                                nested_inlines.push(result_vec[x].element.clone());
+                                            }
+                                            result_vec[x] =
+                                                InlineElement { element: Inline::None, slice: "" };
+                                        },
+                                        _ => {
+                                            nested_inlines.push(result_vec[x].element.clone());
+                                            result_vec[x] =
+                                                InlineElement { element: Inline::None, slice: "" };
+                                            is_last_str = false;
+                                        },
+                                    }
+                                }
+
+                                if delim.delimiter_char == '~' {
+                                    result_vec[lower_res_index] = InlineElement {
+                                        element: Inline::Strikeout(nested_inlines.clone()),
+                                        slice: &base_string[lower_bound..upper_bound],
+                                    };
+                                    emph_vector.push(InlineElement {
+                                        element: Inline::Strikeout(nested_inlines),
+                                        slice: &base_string[lower_bound..upper_bound],
+                                    });
+                                } else {
+                                    result_vec[lower_res_index] = InlineElement {
+                                        element: Inline::Strong(nested_inlines.clone()),
+                                        slice: &base_string[lower_bound..upper_bound],
+                                    };
+                                    emph_vector.push(InlineElement {
+                                        element: Inline::Strong(nested_inlines),
+                                        slice: &base_string[lower_bound..upper_bound],
+                                    });
+                                }
+                                let bottom_index =
+                                    lower_bound + 2 - delimiter_stack[j].delim_slice.len();
+                                delimiter_stack[j]
+                                    .change_slice(&base_string[bottom_index..lower_bound]);
+                                let top_index = upper_bound - 2 + delim.delim_slice.len();
+                                delim.change_slice(&base_string[upper_bound..top_index]);
+                                for delimiter in &mut delimiter_stack[j + 1..index] {
+                                    delimiter.change_slice("");
+                                    delimiter.typeof_delimiter = Potential::None;
+                                    delimiter.delimiter_char = '-';
+                                    delimiter.count = 0;
+                                }
+                            }
+                            if !delim.delim_slice.is_empty()
+                                && !delimiter_stack[j].delim_slice.is_empty()
+                                && delim.delimiter_char == delimiter_stack[j].delimiter_char
+                            {
+                                let lower_res_index = delimiter_stack[j].temp_vec.pop().unwrap();
+                                let upper_res_index = delim.temp_vec.remove(0);
+                                result_vec[upper_res_index] =
+                                    InlineElement { element: Inline::None, slice: "" };
+                                result_vec[lower_res_index] =
+                                    InlineElement { element: Inline::None, slice: "" };
+                                let mut nested_inlines = Vec::new();
+                                let mut is_last_str: bool = false;
+                                for x in lower_res_index..=upper_res_index {
+                                    let elem = &mut result_vec[x];
+                                    match &elem.element {
+                                        Inline::Temp(c) | Inline::Str(c) => {
+                                            if is_last_str {
+                                                if let Inline::Str(mut last) =
+                                                    nested_inlines.pop().unwrap()
+                                                {
+                                                    last.push_str(c);
+                                                    nested_inlines.push(Inline::Str(last));
+                                                }
+                                            } else {
+                                                nested_inlines.push(Inline::Str(c.to_string()));
+                                                is_last_str = true;
+                                            }
+                                            elem.element = Inline::None;
+                                            elem.slice = "";
+                                        },
+                                        Inline::None => {
+                                            elem.element = Inline::None;
+                                            elem.slice = "";
+                                        },
+                                        _ => {
+                                            nested_inlines.push(elem.element.clone());
+                                            elem.element = Inline::None;
+                                            elem.slice = "";
+                                            is_last_str = false;
+                                        },
+                                    }
+                                }
+
+                                let lower_bound = delimiter_stack[j].delim_slice.as_ptr() as usize
+                                    - base_string.as_ptr() as usize
+                                    + delimiter_stack[j].delim_slice.len()
+                                    - 1;
+                                let upper_bound = delim.delim_slice.as_ptr() as usize
+                                    - base_string.as_ptr() as usize
+                                    + 1;
+                                if delim.delimiter_char == '~' {
+                                    result_vec[lower_res_index] = InlineElement {
+                                        element: Inline::Strikeout(nested_inlines.clone()),
+                                        slice: &base_string[lower_bound..upper_bound],
+                                    };
+                                    emph_vector.push(InlineElement {
+                                        element: Inline::Strikeout(nested_inlines),
+                                        slice: &base_string[lower_bound..upper_bound],
+                                    });
+                                } else {
+                                    result_vec[lower_res_index] = InlineElement {
+                                        element: Inline::Emph(nested_inlines.clone()),
+                                        slice: &base_string[lower_bound..upper_bound],
+                                    };
+                                    emph_vector.push(InlineElement {
+                                        element: Inline::Emph(nested_inlines),
+                                        slice: &base_string[lower_bound..upper_bound],
+                                    });
+                                }
+                                let bottom_index =
+                                    lower_bound + 1 - delimiter_stack[j].delim_slice.len();
+                                delimiter_stack[j]
+                                    .change_slice(&base_string[bottom_index..lower_bound]);
+                                let top_index = upper_bound - 1 + delim.delim_slice.len();
+                                delim.change_slice(&base_string[upper_bound..top_index]);
+                                for delimiter in delimiter_stack.iter_mut().take(index).skip(j + 1) {
+                                    delimiter.change_slice("");
+                                    delimiter.typeof_delimiter = Potential::None;
+                                    delimiter.delimiter_char = '-';
+                                    delimiter.count = 0;
+                                }
                             }
                         }
                     }
-                }
-                // for x in result_vec.clone() {
-                //     if x.element != Inline::None {
-                //         print!("{:?}\n", x.element);
-                //     }
-                // }
-                delimiter_stack[index] = delim;
-            },
+                    // for x in result_vec.clone() {
+                    //     if x.element != Inline::None {
+                    //         print!("{:?}\n", x.element);
+                    //     }
+                    // }
+                    delimiter_stack[index] = delim;
+                },
+            }
         }
+        emph_vector
     }
-    emph_vector
 }
 
 // #[cfg(test)]

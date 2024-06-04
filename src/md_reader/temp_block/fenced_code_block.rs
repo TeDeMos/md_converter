@@ -105,6 +105,7 @@ mod tests {
     }
     
     fn new(line: &str) -> FencedCodeBlock {
+        #[allow(clippy::single_match_else)]
         match FencedCodeBlock::check(SkipIndent::skip(line, 0).into_line()) {
             CheckResult::New(TempBlock::FencedCodeBlock(f)) => f,
             _ => panic!(),

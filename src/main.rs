@@ -18,6 +18,7 @@ fn main() {
         print!("{:?}", x);
     }
     // run()
+    run()
 }
 
 fn run() {

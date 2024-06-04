@@ -523,6 +523,7 @@ mod tests {
     use super::*;
 
     fn new_dash(line: &str) -> List {
+        #[allow(clippy::single_match_else)]
         match List::check_star_dash(SkipIndent::skip(line, 0).into_line()) {
             CheckResult::New(TempBlock::List(l)) => l,
             _ => panic!(),
@@ -530,6 +531,7 @@ mod tests {
     }
 
     fn new_plus(line: &str) -> List {
+        #[allow(clippy::single_match_else)]
         match List::check_plus(SkipIndent::skip(line, 0).into_line()) {
             CheckResult::New(TempBlock::List(l)) => l,
             _ => panic!(),
@@ -537,6 +539,7 @@ mod tests {
     }
 
     fn new_number(line: &str) -> List {
+        #[allow(clippy::single_match_else)]
         match List::check_number(SkipIndent::skip(line, 0).into_line()) {
             CheckResult::New(TempBlock::List(l)) => l,
             _ => panic!(),
@@ -721,12 +724,12 @@ mod tests {
         check(Item::check_plus, plus_text, "+a");
         check(Item::check_plus, plus_new, "+ a");
         check(Item::check_plus, plus_new, "+     a");
-        
+
         check(Item::check_plus_paragraph, plus_text, "+");
         check(Item::check_plus_paragraph, plus_text, "+a");
         check(Item::check_plus_paragraph, plus_new, "+ a");
         check(Item::check_plus_paragraph, plus_new, "+     a");
-        
+
         check(Item::check_star_dash, break_new, "*");
         check(Item::check_star_dash, break_text, "*a");
         check(Item::check_star_dash, break_break, "***");

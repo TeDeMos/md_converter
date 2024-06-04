@@ -5,7 +5,6 @@ use std::error::Error;
 use derive_more::Display;
 
 use crate::ast::{Alignment, Block, ColSpec, Inline, Pandoc, Row, TableBody, TableHead};
-use crate::md_reader::MdReader;
 use crate::traits::AstWriter;
 
 /// Writes a [`Pandoc`] ast representation to LaTeX. For now only [`Block`] and `[Inline`] elements
@@ -32,7 +31,7 @@ impl AstWriter for LatexWriter {
         self.push_str("\\usepackage{graphicx}\n");
         self.push_str("\\usepackage{listings}\n");
         self.push_str(
-            "\\providecommand{\tightlist}{%\\setlength{\\itemsep}{0pt}\\setlength{\\parskip}{0pt}}",
+            "\\providecommand{\\tightlist}{\\setlength{\\itemsep}{0pt}\\setlength{\\parskip}{0pt}}\n",
         );
         self.push_str("\\begin{document}\n");
         self.write_blocks(ast.blocks)?;
