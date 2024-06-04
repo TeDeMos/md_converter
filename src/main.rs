@@ -1,8 +1,8 @@
 use std::{fs, io};
 use std::io::Read;
 
-use clap::builder::PossibleValuesParser;
 use clap::{Arg, ArgAction, Command};
+use clap::builder::PossibleValuesParser;
 
 use md_converter::latex_writer::LatexWriter;
 use md_converter::maps::{ReaderMap, WriterMap};
@@ -12,6 +12,12 @@ use md_converter::native_writer::NativeWriter;
 use md_converter::typst_writer::TypstWriter;
 
 fn main() {
+    // let test =
+    // "\\!\\\"\\#\\$\\%\\&\\\'\\(\\)\\*\\+\\,\\-\\.\\/\\:\\;\\<\\=\\>\\?\\@\\[\\]\\^\\_\\\
+    //             `\\{\\|\\}\\~";
+    // for x in InlineParser::parse_lines(test) {
+    //     print!("{:?}", x);
+    // }
     run()
 }
 
@@ -26,7 +32,10 @@ fn run() {
     let matches = Command::new("convert")
         .version("1.0")
         .author("Tymoteusz Malec, Jakub Szweda")
-        .about("Converts files from one format to another or reads from stdin if no filename is provided")
+        .about(
+            "Converts files from one format to another or reads from stdin if no filename is \
+             provided",
+        )
         .arg(
             Arg::new("from")
                 .long("from")
@@ -65,8 +74,8 @@ fn run() {
             Err(e) => {
                 println!("Failed to read file:\n{}", e);
                 return;
-            }
-        }
+            },
+        },
         None => {
             let mut s = String::new();
             match io::stdin().read_to_string(&mut s) {
@@ -74,7 +83,7 @@ fn run() {
                 Err(e) => {
                     println!("Failed to read input from stdin:\n{}", e);
                     return;
-                }
+                },
             }
         },
     };
@@ -100,4 +109,3 @@ fn run() {
         None => println!("{}", result),
     }
 }
-

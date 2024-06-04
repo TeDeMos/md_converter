@@ -6,7 +6,6 @@ use links::Links;
 use temp_block::TempBlock;
 
 use crate::ast::Pandoc;
-use crate::md_reader::iters::SkipIndent;
 use crate::traits::AstReader;
 
 pub mod inline_parser;
@@ -120,6 +119,9 @@ mod tests {
 
     #[test]
     fn lists() { test(281, 306) }
+
+    #[test]
+    fn escaping() { test(309, 320) }
 
     #[test]
     fn emph() { test(360, 488) }
